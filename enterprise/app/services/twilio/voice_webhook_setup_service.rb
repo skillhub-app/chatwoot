@@ -17,8 +17,8 @@ class Twilio::VoiceWebhookSetupService
   private
 
   def validate_token_credentials!
-    # Only validate Account SID + Auth Token
-    token_client.incoming_phone_numbers.list(limit: 1)
+    validation_client = channel.api_key_sid.present? ? api_key_client : token_client
+    validation_client.incoming_phone_numbers.list(limit: 1)
   rescue StandardError => e
     log_twilio_error('AUTH_VALIDATION_TOKEN', e)
     raise
