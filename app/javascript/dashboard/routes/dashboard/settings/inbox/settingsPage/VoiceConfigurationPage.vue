@@ -123,7 +123,7 @@ export default {
       />
     </div>
 
-    <div v-if="voiceEnabled && !needsCredentials">
+    <div v-if="inbox.voice_enabled && inbox.voice_call_webhook_url">
       <SettingsFieldSection
         :label="$t('INBOX_MGMT.ADD.VOICE.CONFIGURATION.TWILIO_VOICE_URL_TITLE')"
         :help-text="
