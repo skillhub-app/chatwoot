@@ -2,7 +2,7 @@ module Enterprise::Messages::MessageBuilder
   private
 
   def message_type
-    return @message_type if @message_type == 'incoming' && twilio_voice_inbox?
+    return @message_type if @message_type == 'incoming' && twilio_voice_inbox? && @params[:content_type] == 'voice_call'
 
     super
   end
