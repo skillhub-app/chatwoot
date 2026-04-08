@@ -38,7 +38,11 @@ export function useDropdownPosition(
     if (!unref(enabled)) return 'top-full mt-2';
     const dh = dropdown.height.value || FALLBACK_SIZE;
     const spaceBelow = winHeight.value - trigger.bottom.value;
-    return spaceBelow >= dh + margin ? 'top-full mt-2' : 'bottom-full mb-2';
+    const spaceAbove = trigger.top.value;
+    // Only flip above if it fits there; otherwise stay below (more room or equal)
+    if (spaceBelow >= dh + margin) return 'top-full mt-2';
+    if (spaceAbove >= dh + margin) return 'bottom-full mb-2';
+    return spaceBelow >= spaceAbove ? 'top-full mt-2' : 'bottom-full mb-2';
   });
 
   // Relative mode: Tailwind class + style for absolute-in-parent dropdowns
@@ -72,11 +76,18 @@ export function useDropdownPosition(
     const spaceBelow = winHeight.value - trigger.bottom.value;
     const style = {};
 
-    // Vertical
-    if (spaceBelow >= dh + margin) {
-      style.top = `${trigger.bottom.value + GAP}px`;
-    } else {
+    // Vertical: prefer below, flip above only if it fits, else pick the larger side
+    const spaceAbove = trigger.top.value;
+    const placeAbove =
+      spaceBelow < dh + margin &&
+      (spaceAbove >= dh + margin || spaceAbove > spaceBelow);
+
+    if (placeAbove) {
       style.bottom = `${winHeight.value - trigger.top.value + GAP}px`;
+      style.maxHeight = `${spaceAbove - GAP - margin}px`;
+    } else {
+      style.top = `${trigger.bottom.value + GAP}px`;
+      style.maxHeight = `${spaceBelow - GAP - margin}px`;
     }
 
     // Horizontal
