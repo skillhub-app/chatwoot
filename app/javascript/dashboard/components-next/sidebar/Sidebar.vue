@@ -717,7 +717,13 @@ const menuItems = computed(() => {
   <aside
     v-on-click-outside="[
       closeMobileSidebar,
-      { ignore: ['#mobile-sidebar-launcher'] },
+      {
+        ignore: [
+          '#mobile-sidebar-launcher',
+          '[data-popover-content]',
+          '[data-popover-backdrop]',
+        ],
+      },
     ]"
     class="bg-n-background flex flex-col text-sm pb-px fixed top-0 ltr:left-0 rtl:right-0 h-full z-40 w-[200px] md:w-auto md:relative md:flex-shrink-0 md:ltr:translate-x-0 md:rtl:translate-x-0 ltr:border-r rtl:border-l border-n-weak"
     :class="[
