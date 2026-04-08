@@ -158,7 +158,6 @@ const closeCompose = () => {
   }
   targetInbox.value = null;
   resetContacts();
-  emit('close');
 };
 
 const discardCompose = () => {
