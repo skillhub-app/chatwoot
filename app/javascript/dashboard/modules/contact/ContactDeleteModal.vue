@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useStore } from 'vuex';
 import { useRoute, useRouter } from 'vue-router';
 import { useAlert } from 'dashboard/composables';
+import { useMapGetter } from 'dashboard/composables/store';
 
 import Popover from 'dashboard/components-next/popover/Popover.vue';
 import Button from 'dashboard/components-next/button/Button.vue';
@@ -27,6 +28,8 @@ const { t } = useI18n();
 const store = useStore();
 const route = useRoute();
 const router = useRouter();
+
+const uiFlags = useMapGetter('contacts/getUIFlags');
 
 const confirmMessage = computed(
   () => `${t('DELETE_CONTACT.CONFIRM.MESSAGE')} ${props.contact.name}?`
@@ -80,6 +83,8 @@ const onDelete = async hide => {
             ruby
             sm
             :label="$t('DELETE_CONTACT.CONFIRM.YES')"
+            :is-loading="uiFlags.isDeleting"
+            :disabled="uiFlags.isDeleting"
             @click="onDelete(hide)"
           />
         </div>
