@@ -110,7 +110,7 @@ class Api::V1::AccountsController < Api::BaseController
   end
 
   def custom_attributes_params
-    params.permit(:industry, :company_size, :timezone, :referral_source)
+    params.permit(:industry, :company_size, :timezone, :referral_source, :user_role)
   end
 
   def settings_params

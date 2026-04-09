@@ -176,6 +176,7 @@ const handleSubmit = async () => {
       company_size: companySize.value,
       timezone: timezone.value,
       referral_source: referralSource.value,
+      user_role: userRole.value,
     });
 
     const init = initialValues.value;
