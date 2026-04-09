@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, nextTick, onMounted, watch } from 'vue';
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import { useVuelidate } from '@vuelidate/core';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
@@ -63,8 +63,10 @@ const v$ = useVuelidate(validationRules, {
 const userName = computed(() => currentUser.value?.name || '');
 const userEmail = computed(() => currentUser.value?.email || '');
 const accountName = computed(() => currentAccount.value?.name || '');
+const enrichmentTimedOut = ref(false);
 const isEnriching = computed(
   () =>
+    !enrichmentTimedOut.value &&
     currentAccount.value?.custom_attributes?.onboarding_step === 'enrichment'
 );
 const companyLogo = computed(() => {
@@ -141,13 +143,28 @@ const populateFormFields = () => {
   snapshotInitialValues();
 };
 
+let enrichmentTimer = null;
+
 onMounted(() => {
   populateFormFields();
   useTrack(ONBOARDING_EVENTS.ACCOUNT_DETAILS_VISITED);
+  if (isEnriching.value) {
+    enrichmentTimer = setTimeout(() => {
+      enrichmentTimedOut.value = true;
+      populateFormFields();
+    }, 30000);
+  }
+});
+
+onUnmounted(() => {
+  if (enrichmentTimer) clearTimeout(enrichmentTimer);
 });
 
 watch(isEnriching, newVal => {
-  if (!newVal) populateFormFields();
+  if (!newVal) {
+    if (enrichmentTimer) clearTimeout(enrichmentTimer);
+    populateFormFields();
+  }
 });
 
 const enableWebsiteEditing = () => {
