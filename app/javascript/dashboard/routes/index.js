@@ -41,10 +41,12 @@ export const validateAuthenticateRoutePermission = async (to, next) => {
     account = store.getters['accounts/getAccount'](routeAccountId);
   }
   const onboardingStep = account?.custom_attributes?.onboarding_step;
-  if (onboardingStep && !isOnOnboardingView(to)) {
+  const userAccount = accounts.find(a => a.id === routeAccountId);
+  const isAdmin = userAccount?.role === 'administrator';
+  if (onboardingStep && isAdmin && !isOnOnboardingView(to)) {
     return next(frontendURL(`accounts/${routeAccountId}/onboarding`));
   }
-  if (!onboardingStep && isOnOnboardingView(to)) {
+  if ((!onboardingStep || !isAdmin) && isOnOnboardingView(to)) {
     return next(frontendURL(`accounts/${routeAccountId}/dashboard`));
   }
 
