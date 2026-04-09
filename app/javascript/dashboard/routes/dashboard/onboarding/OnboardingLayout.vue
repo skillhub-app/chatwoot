@@ -6,6 +6,7 @@ defineProps({
   subtitle: { type: String, default: '' },
   continueLabel: { type: String, default: 'Continue' },
   isLoading: { type: Boolean, default: false },
+  disabled: { type: Boolean, default: false },
 });
 
 defineEmits(['continue']);
@@ -107,6 +108,7 @@ defineEmits(['continue']);
           type="submit"
           blue
           :is-loading="isLoading"
+          :disabled="disabled"
           class="w-full justify-center"
           @click="$emit('continue')"
         >

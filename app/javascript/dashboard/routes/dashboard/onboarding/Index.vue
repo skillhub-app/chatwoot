@@ -156,6 +156,11 @@ const enableWebsiteEditing = () => {
 };
 
 const handleSubmit = async () => {
+  // Block submit while enrichment is still running so users can't bypass
+  // the form with empty values — the controller would otherwise clear
+  // onboarding_step and persist incomplete data.
+  if (isEnriching.value) return;
+
   v$.value.$touch();
   if (v$.value.$invalid) {
     useAlert(t('ONBOARDING_NEXT.VALIDATION_ERROR'));
@@ -216,6 +221,7 @@ const handleSubmit = async () => {
       :subtitle="t('ONBOARDING_NEXT.SUBTITLE')"
       :continue-label="t('ONBOARDING_NEXT.CONTINUE')"
       :is-loading="isSubmitting"
+      :disabled="isEnriching"
     >
       <OnboardingSection
         :title="t('ONBOARDING_NEXT.YOUR_DETAILS')"
