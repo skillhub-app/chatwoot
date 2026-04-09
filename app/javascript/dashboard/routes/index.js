@@ -7,6 +7,7 @@ import { validateLoggedInRoutes } from '../helper/routeHelpers';
 import { isOnOnboardingView } from 'v3/helpers/RouteHelper';
 import AnalyticsHelper from '../helper/AnalyticsHelper';
 
+const ONBOARDING_STEPS = ['account_details', 'enrichment'];
 const routes = [...dashboard.routes];
 
 export const router = createRouter({ history: createWebHistory(), routes });
@@ -41,12 +42,13 @@ export const validateAuthenticateRoutePermission = async (to, next) => {
     account = store.getters['accounts/getAccount'](routeAccountId);
   }
   const onboardingStep = account?.custom_attributes?.onboarding_step;
+  const needsOnboarding = ONBOARDING_STEPS.includes(onboardingStep);
   const userAccount = accounts.find(a => a.id === routeAccountId);
   const isAdmin = userAccount?.role === 'administrator';
-  if (onboardingStep && isAdmin && !isOnOnboardingView(to)) {
+  if (needsOnboarding && isAdmin && !isOnOnboardingView(to)) {
     return next(frontendURL(`accounts/${routeAccountId}/onboarding`));
   }
-  if ((!onboardingStep || !isAdmin) && isOnOnboardingView(to)) {
+  if ((!needsOnboarding || !isAdmin) && isOnOnboardingView(to)) {
     return next(frontendURL(`accounts/${routeAccountId}/dashboard`));
   }
 
