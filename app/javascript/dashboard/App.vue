@@ -60,13 +60,6 @@ export default {
       currentUser: 'getCurrentUser',
       authUIFlags: 'getAuthUIFlags',
     }),
-    // Prevent dashboard from flashing before onboarding redirect.
-    // The account store is empty until accounts/get completes, so we hold
-    // rendering until account data is available and we know which route to show.
-    isAccountReady() {
-      if (!this.currentAccountId) return true;
-      return Object.keys(this.getAccount(this.currentAccountId)).length > 0;
-    },
     hideOnOnboardingView() {
       return !isOnOnboardingView(this.$route);
     },
@@ -124,15 +117,6 @@ export default {
       this.reconnectService = new ReconnectService(this.store, this.router);
       window.reconnectService = this.reconnectService;
 
-      const onboardingStep = account?.custom_attributes?.onboarding_step;
-      if (onboardingStep && !isOnOnboardingView(this.$route)) {
-        this.router.replace({
-          name: 'onboarding_account_details',
-          params: { accountId: this.currentAccountId },
-        });
-        return;
-      }
-
       verifyServiceWorkerExistence(registration =>
         registration.pushManager.getSubscription().then(subscription => {
           if (subscription) {
@@ -147,7 +131,7 @@ export default {
 
 <template>
   <div
-    v-if="!authUIFlags.isFetching && isAccountReady"
+    v-if="!authUIFlags.isFetching"
     id="app"
     class="flex flex-col w-full h-screen min-h-0 bg-n-background"
     :dir="isRTL ? 'rtl' : 'ltr'"

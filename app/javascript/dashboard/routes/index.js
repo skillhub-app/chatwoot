@@ -11,7 +11,7 @@ const routes = [...dashboard.routes];
 
 export const router = createRouter({ history: createWebHistory(), routes });
 
-export const validateAuthenticateRoutePermission = (to, next) => {
+export const validateAuthenticateRoutePermission = async (to, next) => {
   const { isLoggedIn, getCurrentUser: user } = store.getters;
 
   if (!isLoggedIn) {
@@ -32,10 +32,14 @@ export const validateAuthenticateRoutePermission = (to, next) => {
     return next(frontendURL(`accounts/${accountId}/dashboard`));
   }
 
-  // Check if account has a pending onboarding step (from accounts store).
-  // On initial load the store may not be populated yet — App.vue handles that case.
+  // Wait for the account to load before deciding onboarding vs dashboard so
+  // the first navigation already lands on the correct route (no flash).
   const routeAccountId = Number(to.params?.accountId || accountId);
-  const account = store.getters['accounts/getAccount'](routeAccountId);
+  let account = store.getters['accounts/getAccount'](routeAccountId);
+  if (Object.keys(account).length === 0) {
+    await store.dispatch('accounts/get', { silent: true });
+    account = store.getters['accounts/getAccount'](routeAccountId);
+  }
   const onboardingStep = account?.custom_attributes?.onboarding_step;
   if (onboardingStep && !isOnOnboardingView(to)) {
     return next(frontendURL(`accounts/${routeAccountId}/onboarding`));
@@ -51,15 +55,14 @@ export const validateAuthenticateRoutePermission = (to, next) => {
 export const initalizeRouter = () => {
   const userAuthentication = store.dispatch('setUser');
 
-  router.beforeEach((to, _from, next) => {
+  router.beforeEach(async (to, _from, next) => {
     AnalyticsHelper.page(to.name || '', {
       path: to.path,
       name: to.name,
     });
 
-    userAuthentication.then(() => {
-      return validateAuthenticateRoutePermission(to, next, store);
-    });
+    await userAuthentication;
+    await validateAuthenticateRoutePermission(to, next, store);
   });
 };
 
