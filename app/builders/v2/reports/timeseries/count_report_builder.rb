@@ -46,11 +46,18 @@ class V2::Reports::Timeseries::CountReportBuilder < V2::Reports::Timeseries::Bas
   end
 
   def scope_for_bot_resolutions_count
+    # Exclude conversations that also had a handoff in the same range — handoff wins
+    handoff_subquery = scope.reporting_events.where(
+      name: :conversation_bot_handoff,
+      account_id: account.id,
+      created_at: range
+    ).select(:conversation_id)
+
     scope.reporting_events.where(
       name: :conversation_bot_resolved,
       account_id: account.id,
       created_at: range
-    )
+    ).where.not(conversation_id: handoff_subquery)
   end
 
   def scope_for_bot_handoffs_count

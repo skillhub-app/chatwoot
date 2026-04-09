@@ -58,13 +58,19 @@ module ReportHelper
   end
 
   def bot_resolutions
-    scope.reporting_events.where(account_id: account.id, name: :conversation_bot_resolved,
-                                 created_at: range)
+    # Exclude conversations that also had a handoff in the same range — handoff wins
+    scope.reporting_events.where(account_id: account.id, name: :conversation_bot_resolved, created_at: range)
+         .where.not(conversation_id: bot_handoff_conversation_ids_subquery)
   end
 
   def bot_handoffs
     scope.reporting_events.joins(:conversation).select(:conversation_id).where(account_id: account.id, name: :conversation_bot_handoff,
                                                                                created_at: range).distinct
+  end
+
+  def bot_handoff_conversation_ids_subquery
+    scope.reporting_events.where(account_id: account.id, name: :conversation_bot_handoff, created_at: range)
+         .select(:conversation_id)
   end
 
   def avg_first_response_time
