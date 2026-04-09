@@ -162,7 +162,13 @@ onUnmounted(() => {
 });
 
 watch(isEnriching, newVal => {
-  if (!newVal) {
+  if (newVal) {
+    if (enrichmentTimer) clearTimeout(enrichmentTimer);
+    enrichmentTimer = setTimeout(() => {
+      enrichmentTimedOut.value = true;
+      populateFormFields();
+    }, 30000);
+  } else {
     if (enrichmentTimer) clearTimeout(enrichmentTimer);
     populateFormFields();
   }
