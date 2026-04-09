@@ -10,6 +10,7 @@ class CreateCalls < ActiveRecord::Migration[7.0]
       t.integer :provider, null: false, default: 0
       t.integer :direction, null: false
       t.string :status, null: false, default: 'ringing'
+      t.datetime :started_at
       t.integer :duration_seconds
       t.string :end_reason
       t.jsonb :meta, default: {}
