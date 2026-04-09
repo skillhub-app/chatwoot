@@ -72,9 +72,10 @@ class Api::V1::AccountsController < Api::BaseController
   private
 
   def enqueue_branding_enrichment
-    return if account_params[:email].blank?
+    email = account_params[:email].presence || @user&.email
+    return if email.blank?
 
-    Account::BrandingEnrichmentJob.perform_later(@account.id, account_params[:email])
+    Account::BrandingEnrichmentJob.perform_later(@account.id, email)
     Redis::Alfred.set(format(Redis::Alfred::ACCOUNT_ONBOARDING_ENRICHMENT, account_id: @account.id), '1', ex: 30)
   rescue StandardError => e
     # Enrichment is optional — never let queue/Redis failures abort signup
