@@ -100,13 +100,14 @@ const timezoneOptions = computed(() => {
 const detectBestLocale = () => {
   const codes = (enabledLanguages || []).map(l => l.iso_639_1_code);
   const browserLang = navigator.language?.replace('-', '_');
-  if (!browserLang) return 'en';
+  const accountLocale = currentAccount.value?.locale || 'en';
+  if (!browserLang) return accountLocale;
 
   if (codes.includes(browserLang)) return browserLang;
   const base = browserLang.split('_')[0];
   if (codes.includes(base)) return base;
 
-  return 'en';
+  return accountLocale;
 };
 
 // Snapshot of auto-populated values to detect user edits at submit time
