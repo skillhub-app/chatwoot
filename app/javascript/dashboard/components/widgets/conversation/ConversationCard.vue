@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { getLastMessage } from 'dashboard/helper/conversationHelper';
 import Avatar from 'next/avatar/Avatar.vue';
 import MessagePreview from './MessagePreview.vue';
@@ -85,6 +85,13 @@ const selectedModel = computed({
   get: () => props.selected,
   set: value => onSelectConversation(value),
 });
+
+watch(
+  () => props.chat.id,
+  () => {
+    hovered.value = false;
+  }
+);
 </script>
 
 <template>
