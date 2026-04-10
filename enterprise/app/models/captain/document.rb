@@ -2,16 +2,21 @@
 #
 # Table name: captain_documents
 #
-#  id            :bigint           not null, primary key
-#  content       :text
-#  external_link :string           not null
-#  metadata      :jsonb
-#  name          :string
-#  status        :integer          default("in_progress"), not null
-#  created_at    :datetime         not null
-#  updated_at    :datetime         not null
-#  account_id    :bigint           not null
-#  assistant_id  :bigint           not null
+#  id                     :bigint           not null, primary key
+#  content                :text
+#  content_fingerprint    :string
+#  external_link          :string           not null
+#  last_sync_attempted_at :datetime
+#  last_sync_error_code   :string
+#  last_synced_at         :datetime
+#  metadata               :jsonb
+#  name                   :string
+#  status                 :integer          default("in_progress"), not null
+#  sync_status            :integer
+#  created_at             :datetime         not null
+#  updated_at             :datetime         not null
+#  account_id             :bigint           not null
+#  assistant_id           :bigint           not null
 #
 # Indexes
 #
@@ -19,6 +24,7 @@
 #  index_captain_documents_on_assistant_id                    (assistant_id)
 #  index_captain_documents_on_assistant_id_and_external_link  (assistant_id,external_link) UNIQUE
 #  index_captain_documents_on_status                          (status)
+#  index_captain_documents_on_sync_status                     (sync_status)
 #
 class Captain::Document < ApplicationRecord
   class LimitExceededError < StandardError; end
@@ -44,6 +50,8 @@ class Captain::Document < ApplicationRecord
     available: 1
   }
 
+  enum :sync_status, { syncing: 0, synced: 1, failed: 2 }, prefix: :sync
+
   before_create :ensure_within_plan_limit
   after_create_commit :enqueue_crawl_job
   after_create_commit :update_document_usage
@@ -66,6 +74,14 @@ class Captain::Document < ApplicationRecord
 
   def file_size
     pdf_file.blob.byte_size if pdf_file.attached?
+  end
+
+  def sync_step
+    metadata&.dig('sync_step')
+  end
+
+  def sync_step=(step)
+    self.metadata = (metadata || {}).merge('sync_step' => step)
   end
 
   def openai_file_id
