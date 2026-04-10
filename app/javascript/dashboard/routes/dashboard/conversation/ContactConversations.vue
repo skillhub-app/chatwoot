@@ -107,6 +107,8 @@ watch(
   () => props.contactId,
   (newId, oldId) => {
     if (newId && newId !== oldId) {
+      showContextMenu.value = false;
+      activeContextChat.value = null;
       store.dispatch('contactConversations/get', newId);
     }
   }
