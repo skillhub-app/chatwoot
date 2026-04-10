@@ -25,11 +25,20 @@ const router = useRouter();
 const currentChat = useMapGetter('getSelectedChat');
 const uiFlags = useMapGetter('contactConversations/getUIFlags');
 
-const getContact = id => store.getters['contacts/getContact'](id) || {};
-const getInbox = id => store.getters['inboxes/getInbox'](id) || {};
+const contactGetter = useMapGetter('contacts/getContact');
+const inboxGetter = useMapGetter('inboxes/getInbox');
 
+const activeInbox = useMapGetter('getSelectedInbox');
+const inboxesList = useMapGetter('inboxes/getInboxes');
+const showInboxName = computed(
+  () => !activeInbox.value && inboxesList.value.length > 1
+);
+
+const contactConversationGetter = useMapGetter(
+  'contactConversations/getContactConversation'
+);
 const conversations = computed(() =>
-  store.getters['contactConversations/getContactConversation'](props.contactId)
+  contactConversationGetter.value(props.contactId)
 );
 
 const previousConversations = computed(() =>
@@ -126,15 +135,19 @@ onMounted(() => {
         {{ $t('CONTACT_PANEL.CONVERSATIONS.NO_RECORDS_FOUND') }}
       </span>
     </div>
-    <div v-else class="contact-conversation--list">
+    <div
+      v-else
+      class="contact-conversation--list [&>.conversation:last-child]:!border-b-0 [&>.conversation:last-child:hover]:!border-b-0 [&>.conversation:last-child]:!rounded-b-lg"
+    >
       <ConversationCard
         v-for="conversation in previousConversations"
         :key="conversation.id"
         :chat="conversation"
-        :current-contact="getContact(conversation.meta?.sender?.id)"
+        :current-contact="contactGetter(conversation.meta?.sender?.id) || {}"
         :assignee="conversation.meta?.assignee || {}"
-        :inbox="getInbox(conversation.inbox_id)"
+        :inbox="inboxGetter(conversation.inbox_id) || {}"
         :is-active-chat="currentChat.id === conversation.id"
+        :show-inbox-name="showInboxName"
         hide-thumbnail
         compact
         @click="onCardClick(conversation, $event)"
