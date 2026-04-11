@@ -28,6 +28,5 @@ class CreateCalls < ActiveRecord::Migration[7.0]
     add_index :calls, [:provider, :provider_call_id], unique: true
     add_index :calls, [:account_id, :conversation_id]
     add_index :calls, :message_id
-    add_index :calls, :meta, using: :gin
   end
 end
