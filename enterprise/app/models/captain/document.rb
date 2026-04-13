@@ -76,14 +76,6 @@ class Captain::Document < ApplicationRecord
     pdf_file.blob.byte_size if pdf_file.attached?
   end
 
-  def sync_step
-    metadata&.dig('sync_step')
-  end
-
-  def sync_step=(step)
-    self.metadata = (metadata || {}).merge('sync_step' => step)
-  end
-
   def openai_file_id
     metadata&.dig('openai_file_id')
   end
