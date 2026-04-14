@@ -4,10 +4,8 @@
 #
 #  id                     :bigint           not null, primary key
 #  content                :text
-#  content_fingerprint    :string
 #  external_link          :string           not null
 #  last_sync_attempted_at :datetime
-#  last_sync_error_code   :string
 #  last_synced_at         :datetime
 #  metadata               :jsonb
 #  name                   :string
@@ -21,10 +19,10 @@
 # Indexes
 #
 #  index_captain_documents_on_account_id                      (account_id)
+#  index_captain_documents_on_account_id_and_sync_status      (account_id,sync_status)
 #  index_captain_documents_on_assistant_id                    (assistant_id)
 #  index_captain_documents_on_assistant_id_and_external_link  (assistant_id,external_link) UNIQUE
 #  index_captain_documents_on_status                          (status)
-#  index_captain_documents_on_sync_status                     (sync_status)
 #
 class Captain::Document < ApplicationRecord
   class LimitExceededError < StandardError; end
@@ -74,6 +72,22 @@ class Captain::Document < ApplicationRecord
 
   def file_size
     pdf_file.blob.byte_size if pdf_file.attached?
+  end
+
+  def content_fingerprint
+    metadata&.dig('content_fingerprint')
+  end
+
+  def content_fingerprint=(value)
+    self.metadata = (metadata || {}).merge('content_fingerprint' => value)
+  end
+
+  def last_sync_error_code
+    metadata&.dig('last_sync_error_code')
+  end
+
+  def last_sync_error_code=(value)
+    self.metadata = (metadata || {}).merge('last_sync_error_code' => value)
   end
 
   def openai_file_id
