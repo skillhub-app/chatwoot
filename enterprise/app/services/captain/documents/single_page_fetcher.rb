@@ -2,6 +2,7 @@ class Captain::Documents::SinglePageFetcher
   Result = Struct.new(:success, :title, :content, :error_code, keyword_init: true)
 
   CONTENT_MAX_LENGTH = 200_000
+  FIRECRAWL_EXCLUDE_TAGS = %w[iframe nav footer header .sidebar .cookie-banner [role=navigation] [role=banner] [role=contentinfo]].freeze
 
   def initialize(url)
     @url = url
@@ -26,11 +27,20 @@ class Captain::Documents::SinglePageFetcher
     api_key = InstallationConfig.find_by!(name: 'CAPTAIN_FIRECRAWL_API_KEY').value
     response = HTTParty.post(
       'https://api.firecrawl.dev/v1/scrape',
-      body: { url: @url, formats: ['markdown'], excludeTags: ['iframe'] }.to_json,
+      body: scrape_payload.to_json,
       headers: { 'Authorization' => "Bearer #{api_key}", 'Content-Type' => 'application/json' }
     )
 
     handle_firecrawl_response(response)
+  end
+
+  def scrape_payload
+    {
+      url: @url,
+      formats: ['markdown'],
+      onlyMainContent: true,
+      excludeTags: FIRECRAWL_EXCLUDE_TAGS
+    }
   end
 
   def handle_firecrawl_response(response)
@@ -50,7 +60,8 @@ class Captain::Documents::SinglePageFetcher
 
     doc = Nokogiri::HTML(response.body)
     title = doc.at_xpath('//title')&.text&.strip
-    content = ReverseMarkdown.convert(doc.at_xpath('//body'), unknown_tags: :bypass, github_flavored: true)
+    main_node = doc.at_xpath('//main') || doc.at_xpath('//article') || doc.at_xpath('//body')
+    content = ReverseMarkdown.convert(main_node, unknown_tags: :bypass, github_flavored: true)
 
     Result.new(
       success: true,
