@@ -35,8 +35,7 @@ class Captain::Documents::SyncService
     @document.update!(
       sync_status: :failed,
       last_sync_error_code: error_code,
-      last_sync_attempted_at: Time.current,
-      metadata: cleared_sync_step_metadata
+      last_sync_attempted_at: Time.current
     )
   end
 
@@ -45,8 +44,7 @@ class Captain::Documents::SyncService
       sync_status: :synced,
       last_synced_at: Time.current,
       last_sync_attempted_at: Time.current,
-      last_sync_error_code: nil,
-      metadata: cleared_sync_step_metadata
+      last_sync_error_code: nil
     )
   end
 
@@ -58,12 +56,7 @@ class Captain::Documents::SyncService
       sync_status: :synced,
       last_synced_at: Time.current,
       last_sync_attempted_at: Time.current,
-      last_sync_error_code: nil,
-      metadata: cleared_sync_step_metadata
+      last_sync_error_code: nil
     )
-  end
-
-  def cleared_sync_step_metadata
-    (@document.metadata || {}).except('sync_step')
   end
 end
