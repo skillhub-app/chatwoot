@@ -39,7 +39,8 @@ class Api::V1::Widget::BaseController < ApplicationController
         browser_language: browser.accept_language&.first&.code,
         browser: browser_params,
         initiated_at: timestamp_params,
-        referer: permitted_params[:message][:referer_url]
+        referer: permitted_params[:message][:referer_url],
+        timezone: permitted_params[:message][:timezone]
       },
       custom_attributes: permitted_params[:custom_attributes].presence || {}
     }
