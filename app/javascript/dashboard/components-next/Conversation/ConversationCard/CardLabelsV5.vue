@@ -159,7 +159,7 @@ const onShowLabels = e => {
       v-if="showExpandLabelButton || (disableToggle && allLabelsHidden)"
       v-tooltip.top="{
         content: tooltipText,
-        delay: { show: 1000, hide: 0 },
+        delay: { show: 500, hide: 0 },
       }"
       :label="labelsCountText"
       xs
