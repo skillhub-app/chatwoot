@@ -99,19 +99,11 @@ class Integrations::Hook < ApplicationRecord
   # TODO: When adding credential validation for other integrations (dialogflow, dyte, etc.),
   # extract this into an app-level config flag in apps.yml instead of hardcoding app_id checks.
   def validate_openai_api_key?
-    app_id == 'openai' && enabled? && openai_api_key_changed?
-  end
-
-  def openai_api_key_changed?
-    new_key = settings&.dig('api_key')
-    return false if new_key.blank?
-
-    old_key = settings_was&.dig('api_key')
-    new_key != old_key
+    app_id == 'openai' && enabled?
   end
 
   def validate_openai_api_key
-    return if Integrations::Openai::KeyValidator.valid?(settings['api_key'])
+    return if Integrations::Openai::KeyValidator.valid?(settings&.dig('api_key'))
 
     errors.add(:base, I18n.t('errors.openai.invalid_api_key'))
   end
