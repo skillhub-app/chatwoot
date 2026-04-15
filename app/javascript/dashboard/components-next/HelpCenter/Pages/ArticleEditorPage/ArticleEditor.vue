@@ -58,14 +58,9 @@ watch(
   }
 );
 
-// Parent increments refreshTick after article re-fetch completes.
-// Syncing on this signal avoids visibility/fetch timing races.
-watch(
-  () => props.refreshTick,
-  () => {
-    syncLocalState();
-  }
-);
+// Parent bumps refreshTick after re-fetching on tab visibility, so the
+// store already holds the latest article by the time this fires.
+watch(() => props.refreshTick, syncLocalState);
 
 const debouncedSave = debounce(value => emit('saveArticle', value), 500, false);
 
