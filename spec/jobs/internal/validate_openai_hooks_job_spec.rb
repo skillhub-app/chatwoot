@@ -7,7 +7,7 @@ RSpec.describe Internal::ValidateOpenaiHooksJob do
     create(:integrations_hook, :openai, account: account, settings: { 'api_key' => api_key })
   end
 
-  it 'disables invalid hooks, preserves valid ones, and reports stats' do
+  it 'destroys invalid hooks, preserves valid ones, and reports stats' do
     account_a = create(:account)
     account_b = create(:account)
     valid_hook = create_openai_hook(account: account_a, api_key: 'sk-good')
@@ -17,8 +17,8 @@ RSpec.describe Internal::ValidateOpenaiHooksJob do
     result = described_class.perform_now
 
     expect(valid_hook.reload).to be_enabled
-    expect(invalid_hook.reload).to be_disabled
-    expect(result).to eq(checked: 2, disabled: 1)
+    expect { invalid_hook.reload }.to raise_error(ActiveRecord::RecordNotFound)
+    expect(result).to eq(checked: 2, destroyed: 1)
   end
 
   it 'scopes to a specific account when provided' do
@@ -30,7 +30,7 @@ RSpec.describe Internal::ValidateOpenaiHooksJob do
 
     described_class.perform_now(account: account_a)
 
-    expect(hook_a.reload).to be_disabled
+    expect { hook_a.reload }.to raise_error(ActiveRecord::RecordNotFound)
     expect(hook_b.reload).to be_enabled
   end
 
@@ -40,7 +40,6 @@ RSpec.describe Internal::ValidateOpenaiHooksJob do
     disabled_hook = create_openai_hook(account: account)
     disabled_hook.disable
 
-    # Make ALL future validations fail — if the job checks these hooks, they'd be disabled
     allow(Integrations::Openai::KeyValidator).to receive(:valid?).and_return(false)
 
     described_class.perform_now
