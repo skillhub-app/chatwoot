@@ -2,7 +2,6 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { evaluateSLAStatus } from '@chatwoot/utils';
 
-import SLAPopoverCard from './SLAPopoverCard.vue';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import Label from 'dashboard/components-next/label/Label.vue';
 
@@ -10,10 +9,6 @@ const props = defineProps({
   chat: {
     type: Object,
     default: () => ({}),
-  },
-  showExtendedInfo: {
-    type: Boolean,
-    default: false,
   },
 });
 
@@ -32,13 +27,8 @@ defineOptions({
 });
 
 const appliedSLA = computed(() => props.chat?.applied_sla);
-const slaEvents = computed(() => props.chat?.sla_events);
 const hasSlaThreshold = computed(() => slaStatus.value?.threshold);
 const isSlaMissed = computed(() => slaStatus.value?.isSlaMissed);
-
-const showSlaPopoverCard = computed(
-  () => props.showExtendedInfo && slaEvents.value?.length > 0
-);
 
 const updateSlaStatus = () => {
   slaStatus.value = evaluateSLAStatus({
@@ -87,11 +77,6 @@ defineExpose({
         <Icon icon="i-lucide-flame" class="flex-shrink-0 size-3.5" />
       </template>
     </Label>
-    <SLAPopoverCard
-      v-if="showSlaPopoverCard"
-      :sla-missed-events="slaEvents"
-      class="start-0 md:start-auto md:end-0 top-7 hidden group-hover:flex"
-    />
   </div>
   <template v-else />
 </template>
