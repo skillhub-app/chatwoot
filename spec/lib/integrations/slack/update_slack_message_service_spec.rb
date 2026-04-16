@@ -190,7 +190,7 @@ describe Integrations::Slack::UpdateSlackMessageService do
       end
     end
 
-    context 'when Slack API raises an error' do
+    context 'when Slack API raises an auth error' do
       it 'disables the hook and prompts reauthorization' do
         message = create(
           :message,
@@ -214,6 +214,31 @@ describe Integrations::Slack::UpdateSlackMessageService do
 
         expect(hook).to have_received(:prompt_reauthorization!)
         expect(hook.reload.status).to eq('disabled')
+      end
+    end
+
+    context 'when the original Slack message no longer exists' do
+      it 'skips gracefully without disabling the hook' do
+        message = create(
+          :message,
+          account: account,
+          inbox: channel_email.inbox,
+          conversation: conversation,
+          message_type: :outgoing,
+          content_type: :input_select,
+          content: 'Pick one',
+          content_attributes: {
+            items: [{ title: 'Option A', value: 'a' }],
+            submitted_values: [{ title: 'Option A', value: 'a' }]
+          },
+          external_source_id_slack: 'cw-origin-6789.12345'
+        )
+
+        allow(slack_client).to receive(:chat_update).and_raise(Slack::Web::Api::Errors::MessageNotFound.new('message_not_found'))
+
+        described_class.new(message: message, hook: hook).perform
+
+        expect(hook.reload.status).not_to eq('disabled')
       end
     end
   end
