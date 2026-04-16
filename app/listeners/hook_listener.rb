@@ -43,7 +43,7 @@ class HookListener < BaseListener
       next if hook.inbox.present? && hook.inbox != message.inbox
       next unless supported_hook_event?(hook, event.name)
 
-      HookJob.perform_later(hook, event.name, message: message)
+      HookJob.perform_later(hook, event.name, message: message, previous_changes: event.data[:previous_changes])
     end
   end
 

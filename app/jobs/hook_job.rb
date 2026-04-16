@@ -33,6 +33,13 @@ class HookJob < MutexApplicationJob
         ::SendOnSlackJob.set(wait: 2.seconds).perform_later(message, hook)
       end
     when 'message.updated'
+      # Only interactive bot messages store responses via content_attributes (submitted_values / submitted_email).
+      # Skip other content types to avoid unnecessary job enqueues on every message update.
+      return unless message.content_type.in?(%w[input_select form input_csat input_email])
+      # Guard against redundant Slack updates when unrelated attributes change (e.g. status)
+      # while submitted_values is already present on the message.
+      return unless event_data[:previous_changes]&.key?('content_attributes')
+
       ::UpdateSlackMessageJob.perform_later(message, hook)
     end
   end
