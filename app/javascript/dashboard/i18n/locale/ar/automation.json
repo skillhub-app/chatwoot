@@ -130,6 +130,7 @@
       "ATLEAST_ONE_ACTION_REQUIRED": "إجراء واحد على الأقل مطلوب"
     },
     "NONE_OPTION": "لا شيء",
+    "LAST_RESPONDING_AGENT": "Last Responding Agent",
     "EVENTS": {
       "CONVERSATION_CREATED": "تم إنشاء المحادثة",
       "CONVERSATION_UPDATED": "تم تحديث المحادثة",
