@@ -71,7 +71,10 @@ const clickOutsideIgnore = [
 ];
 
 useKeyboardEvents({
-  Escape: { action: () => isActive.value && hide() },
+  Escape: {
+    action: () => isActive.value && hide(),
+    allowOnFocusedInput: true,
+  },
 });
 
 defineExpose({ show, hide, toggle });
