@@ -1,6 +1,7 @@
 <script setup>
 import { useStore } from 'dashboard/composables/store';
 import { useMapGetter } from 'dashboard/composables/store';
+import { useKeyboardEvents } from 'dashboard/composables/useKeyboardEvents';
 import ContactForm from './ContactForm.vue';
 import Button from 'dashboard/components-next/button/Button.vue';
 
@@ -20,6 +21,17 @@ const onSubmit = async contactItem => {
   await store.dispatch('contacts/update', contactItem);
   await store.dispatch('contacts/fetchContactableInbox', props.contact.id);
 };
+
+// Restore Escape-to-close behavior that was provided by woot-modal before
+// this drawer was reimplemented as a plain fixed panel.
+useKeyboardEvents({
+  Escape: {
+    action: () => {
+      if (props.show) onCancel();
+    },
+    allowOnFocusedInput: true,
+  },
+});
 </script>
 
 <template>
