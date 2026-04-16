@@ -208,9 +208,11 @@ describe Integrations::Slack::UpdateSlackMessageService do
         )
 
         allow(slack_client).to receive(:chat_update).and_raise(Slack::Web::Api::Errors::AccountInactive.new('account_inactive'))
+        allow(hook).to receive(:prompt_reauthorization!)
 
         described_class.new(message: message, hook: hook).perform
 
+        expect(hook).to have_received(:prompt_reauthorization!)
         expect(hook.reload.status).to eq('disabled')
       end
     end
