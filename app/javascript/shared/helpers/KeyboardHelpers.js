@@ -16,15 +16,15 @@ export const hasPressedCommand = e => {
   return e.metaKey;
 };
 
-export const hasPressedEnterAndNotCmdOrShift = e => {
-  return isEnter(e) && !hasPressedCommand(e) && !hasPressedShift(e);
-};
-
 // True when the platform's "command" modifier is held: Cmd on macOS,
 // Ctrl on Windows/Linux. Mirrors the `$mod` convention used by tinykeys
 // and prosemirror-keymap so the editor and the app agree on what counts
 // as the send modifier.
-export const hasPressedMod = e => (isMac() ? e.metaKey : e.ctrlKey);
+export const hasPressedMod = e => Boolean(isMac() ? e.metaKey : e.ctrlKey);
+
+export const hasPressedEnterAndNotCmdOrShift = e => {
+  return isEnter(e) && !hasPressedMod(e) && !hasPressedShift(e);
+};
 
 // Detects the platform-aware "send" shortcut: Cmd+Enter on macOS,
 // Ctrl+Enter on Windows/Linux.
