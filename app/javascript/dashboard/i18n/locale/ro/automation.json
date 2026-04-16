@@ -130,6 +130,7 @@
       "ATLEAST_ONE_ACTION_REQUIRED": "At least one action is required"
     },
     "NONE_OPTION": "Nimic",
+    "LAST_RESPONDING_AGENT": "Last Responding Agent",
     "EVENTS": {
       "CONVERSATION_CREATED": "Conversație creată",
       "CONVERSATION_UPDATED": "Conversație actualizată",
