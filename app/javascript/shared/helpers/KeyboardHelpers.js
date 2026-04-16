@@ -1,3 +1,5 @@
+import { isMac } from './platform';
+
 export const isEnter = e => {
   return e.key === 'Enter';
 };
@@ -18,9 +20,15 @@ export const hasPressedEnterAndNotCmdOrShift = e => {
   return isEnter(e) && !hasPressedCommand(e) && !hasPressedShift(e);
 };
 
-export const hasPressedCommandAndEnter = e => {
-  return hasPressedCommand(e) && isEnter(e);
-};
+// True when the platform's "command" modifier is held: Cmd on macOS,
+// Ctrl on Windows/Linux. Mirrors the `$mod` convention used by tinykeys
+// and prosemirror-keymap so the editor and the app agree on what counts
+// as the send modifier.
+export const hasPressedMod = e => (isMac() ? e.metaKey : e.ctrlKey);
+
+// Detects the platform-aware "send" shortcut: Cmd+Enter on macOS,
+// Ctrl+Enter on Windows/Linux.
+export const hasPressedCommandAndEnter = e => hasPressedMod(e) && isEnter(e);
 
 // If layout is QWERTZ then we add the Shift+keysToModify to fix an known issue
 // https://github.com/chatwoot/chatwoot/issues/9492
