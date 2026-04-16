@@ -23,13 +23,17 @@ class HookJob < MutexApplicationJob
   private
 
   def process_slack_integration(hook, event_name, event_data)
-    return unless ['message.created'].include?(event_name)
-
     message = event_data[:message]
-    if message.attachments.blank?
-      ::SendOnSlackJob.perform_later(message, hook)
-    else
-      ::SendOnSlackJob.set(wait: 2.seconds).perform_later(message, hook)
+
+    case event_name
+    when 'message.created'
+      if message.attachments.blank?
+        ::SendOnSlackJob.perform_later(message, hook)
+      else
+        ::SendOnSlackJob.set(wait: 2.seconds).perform_later(message, hook)
+      end
+    when 'message.updated'
+      ::UpdateSlackMessageJob.perform_later(message, hook)
     end
   end
 
