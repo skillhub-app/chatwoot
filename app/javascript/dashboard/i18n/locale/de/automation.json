@@ -130,6 +130,7 @@
       "ATLEAST_ONE_ACTION_REQUIRED": "Mindestens eine Aktion ist erforderlich"
     },
     "NONE_OPTION": "Keine",
+    "LAST_RESPONDING_AGENT": "Last Responding Agent",
     "EVENTS": {
       "CONVERSATION_CREATED": "Konversation erstellt",
       "CONVERSATION_UPDATED": "Konversation aktualisiert",
