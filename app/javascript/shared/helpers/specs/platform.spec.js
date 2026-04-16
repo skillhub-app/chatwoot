@@ -1,4 +1,4 @@
-import { detectOS, isMac, OS } from '../platform';
+import { detectOS, isApple, OS } from '../platform';
 
 const setNavigator = ({ userAgentData, userAgent, maxTouchPoints } = {}) => {
   Object.defineProperty(global, 'navigator', {
@@ -130,7 +130,7 @@ describe('detectOS', () => {
   });
 });
 
-describe('isMac', () => {
+describe('isApple', () => {
   const originalNavigator = global.navigator;
 
   afterEach(() => {
@@ -141,31 +141,41 @@ describe('isMac', () => {
     });
   });
 
-  it('returns true on macOS via userAgentData', () => {
+  it('returns true on macOS', () => {
     setNavigator({ userAgentData: { platform: 'macOS' } });
-    expect(isMac()).toBe(true);
+    expect(isApple()).toBe(true);
   });
 
-  it('returns true on macOS via userAgent fallback', () => {
+  it('returns true on iOS (iPhone)', () => {
     setNavigator({
       userAgent:
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
     });
-    expect(isMac()).toBe(true);
+    expect(isApple()).toBe(true);
   });
 
-  it('returns false on Windows', () => {
-    setNavigator({ userAgentData: { platform: 'Windows' } });
-    expect(isMac()).toBe(false);
-  });
-
-  it('returns false on iPadOS even when userAgent claims Macintosh', () => {
+  it('returns true on iPadOS spoofing Macintosh', () => {
     setNavigator({
       userAgent:
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
       maxTouchPoints: 5,
     });
-    expect(isMac()).toBe(false);
+    expect(isApple()).toBe(true);
+  });
+
+  it('returns false on Windows', () => {
+    setNavigator({ userAgentData: { platform: 'Windows' } });
+    expect(isApple()).toBe(false);
+  });
+
+  it('returns false on Linux', () => {
+    setNavigator({ userAgentData: { platform: 'Linux' } });
+    expect(isApple()).toBe(false);
+  });
+
+  it('returns false on Android', () => {
+    setNavigator({ userAgentData: { platform: 'Android' } });
+    expect(isApple()).toBe(false);
   });
 });
 

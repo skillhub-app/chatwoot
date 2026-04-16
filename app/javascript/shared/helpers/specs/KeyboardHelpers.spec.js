@@ -20,6 +20,11 @@ const setNavigator = navigatorValue => {
 const onMac = () => setNavigator({ userAgentData: { platform: 'macOS' } });
 const onWindows = () =>
   setNavigator({ userAgentData: { platform: 'Windows' } });
+const onIOS = () =>
+  setNavigator({
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
+  });
 
 describe('#KeyboardHelpers', () => {
   describe('#isEnter', () => {
@@ -65,6 +70,12 @@ describe('#KeyboardHelpers', () => {
       expect(hasPressedMod({ metaKey: true, ctrlKey: false })).toBe(false);
     });
 
+    it('uses metaKey on iOS hardware keyboards', () => {
+      onIOS();
+      expect(hasPressedMod({ metaKey: true, ctrlKey: false })).toBe(true);
+      expect(hasPressedMod({ metaKey: false, ctrlKey: true })).toBe(false);
+    });
+
     it('returns false when no modifier is held', () => {
       onWindows();
       expect(hasPressedMod({ metaKey: false, ctrlKey: false })).toBe(false);
@@ -96,6 +107,13 @@ describe('#KeyboardHelpers', () => {
       onMac();
       expect(hasPressedCommandAndEnter({ key: 'Enter', ctrlKey: true })).toBe(
         false
+      );
+    });
+
+    it('returns true for Cmd+Enter on iOS hardware keyboards', () => {
+      onIOS();
+      expect(hasPressedCommandAndEnter({ key: 'Enter', metaKey: true })).toBe(
+        true
       );
     });
 

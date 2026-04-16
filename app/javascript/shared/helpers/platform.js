@@ -44,4 +44,7 @@ export function detectOS() {
   return OS.UNKNOWN;
 }
 
-export const isMac = () => detectOS() === OS.MAC;
+export const isApple = () => {
+  const os = detectOS();
+  return os === OS.MAC || os === OS.IOS;
+};
