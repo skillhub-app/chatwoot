@@ -1,0 +1,30 @@
+version: '3'
+
+# Local Mac development overrides
+# Usage: docker compose up
+# This file is automatically merged with docker-compose.yaml by Docker Compose.
+
+services:
+  rails:
+    environment:
+      - WEBPACKER_DEV_SERVER_HOST=vite
+    volumes:
+      - ./:/app:cached   # 'cached' is faster than 'delegated' on Mac with Docker Desktop
+
+  sidekiq:
+    volumes:
+      - ./:/app:cached
+
+  vite:
+    volumes:
+      - ./:/app:cached
+
+  postgres:
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust  # no password required locally
+
+  redis:
+    ports:
+      - '6379:6379'
