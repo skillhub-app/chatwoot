@@ -16,6 +16,12 @@ custom_branding:
   icon: 'icon-paint-brush-line'
   config_key: 'custom_branding'
   enterprise: true
+branding:
+  name: 'Configurações de Marca'
+  description: 'Personalize o nome, logotipos e identidade visual do sistema.'
+  enabled: true
+  icon: 'icon-paint-brush-line'
+  config_key: 'branding'
 agent_capacity:
   name: 'Agent Capacity'
   description: 'Set limits to auto-assigning conversations to your agents.'
@@ -34,6 +40,23 @@ disable_branding:
   enabled: <%= (ChatwootHub.pricing_plan != 'community') %>
   icon: 'icon-sailbot-fill'
   enterprise: true
+
+# ------- Kanban CRM Features ------- #
+kanban_crm:
+  name: 'Kanban CRM'
+  description: 'Pipeline de vendas integrado com a mensageria para gestão de leads.'
+  enabled: true
+  icon: 'icon-kanban'
+kanban_gamification:
+  name: 'Kanban Gamificação'
+  description: 'Ranking de agentes, metas, pontos e badges para equipes de vendas.'
+  enabled: true
+  icon: 'icon-trophy-line'
+kanban_tv_mode:
+  name: 'Kanban Modo TV'
+  description: 'Exibição de ranking em tela cheia para TV/monitor da equipe.'
+  enabled: true
+  icon: 'icon-tv-line'
 
 # ------- Product Features ------- #
 help_center:

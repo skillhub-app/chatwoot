@@ -28,6 +28,26 @@ module.exports = {
         'no-console': 'off',
       },
     },
+    {
+      // Kanban module uses Portuguese strings directly and :style bindings for dynamic colors
+      files: [
+        'app/javascript/dashboard/components/kanban/**/*.vue',
+        'app/javascript/dashboard/routes/dashboard/kanban/**/*.{js,vue}',
+        'app/javascript/dashboard/routes/dashboard/settings/reports/KanbanReports.vue',
+        'app/javascript/dashboard/api/kanban.js',
+        'app/javascript/dashboard/store/modules/kanban.js',
+      ],
+      rules: {
+        'vue/no-bare-strings-in-template': 'off',
+        '@intlify/vue-i18n/no-raw-text': 'off',
+        'vue/no-static-inline-styles': 'off',
+        'max-classes-per-file': 'off',
+        'no-plusplus': 'off',
+        // prettier formats multi-line text content which conflicts with these rules
+        'vue/html-closing-bracket-newline': 'off',
+        'vue/max-attributes-per-line': 'off',
+      },
+    },
   ],
   plugins: ['html', 'prettier'],
   parserOptions: {

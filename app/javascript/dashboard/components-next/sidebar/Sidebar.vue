@@ -473,6 +473,25 @@ const menuItems = computed(() => {
       ],
     },
     {
+      name: 'Kanban',
+      label: t('SIDEBAR.KANBAN'),
+      icon: 'i-lucide-kanban',
+      children: [
+        {
+          name: 'Kanban Board',
+          label: 'Board',
+          to: accountScopedRoute('kanban_board'),
+          activeOn: ['kanban_board'],
+        },
+        {
+          name: 'Kanban Gamification',
+          label: 'Gamificação 🏆',
+          to: accountScopedRoute('kanban_gamification'),
+          activeOn: ['kanban_gamification', 'kanban_tv'],
+        },
+      ],
+    },
+    {
       name: 'Reports',
       label: t('SIDEBAR.REPORTS'),
       icon: 'i-lucide-chart-spline',
@@ -502,6 +521,12 @@ const menuItems = computed(() => {
           name: 'Reports Bot',
           label: t('SIDEBAR.REPORTS_BOT'),
           to: accountScopedRoute('bot_reports'),
+        },
+        {
+          name: 'Reports Kanban',
+          label: t('SIDEBAR.KANBAN'),
+          to: accountScopedRoute('kanban_reports'),
+          activeOn: ['kanban_reports'],
         },
       ],
     },

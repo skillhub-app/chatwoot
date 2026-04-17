@@ -3,6 +3,7 @@ import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 
 import ReportsWrapper from './components/ReportsWrapper.vue';
 import Index from './Index.vue';
+import KanbanReports from './KanbanReports.vue';
 
 import AgentReportsIndex from './AgentReportsIndex.vue';
 import InboxReportsIndex from './InboxReportsIndex.vue';
@@ -167,6 +168,12 @@ export default {
           name: 'bot_reports',
           meta,
           component: BotReports,
+        },
+        {
+          path: 'kanban',
+          name: 'kanban_reports',
+          meta: { permissions: ['administrator', 'agent'] },
+          component: KanbanReports,
         },
       ],
     },

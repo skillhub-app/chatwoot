@@ -1,113 +1,287 @@
-# Chatwoot Development Guidelines
+# Chatwoot-Volponi
+## Projeto: Chatwoot-Volponi (Skill-Hub Edition)
 
-## Build / Test / Lint
+> Quando perguntado "qual projeto é esse?", responda: **Chatwoot-Volponi**
+
+---
+
+## Identidade do Projeto
+
+- **Nome**: Chatwoot-Volponi
+- **Edição**: Skill-Hub Edition
+- **Base**: Fork do [chatwoot/chatwoot](https://github.com/chatwoot/chatwoot)
+- **Repositório**: https://github.com/skillhub-app/chatwoot
+- **Branch principal**: `main`
+- **Branch de desenvolvimento**: `develop`
+- **Feature ativa**: `feature/kanban`
+
+---
+
+## Ambiente Local
+
+- **URL**: http://localhost:3000
+- **Admin**: adm@skill-hub.app
+- **Subir tudo**: `docker compose up` (na pasta `/Users/wesleipreisner/chatwoot`)
+- **MailHog**: http://localhost:8025
+- **Primeira vez**:
+  ```bash
+  docker compose build
+  docker compose run --rm rails bundle exec rails db:chatwoot_prepare
+  docker compose up
+  ```
+
+---
+
+## Stack Técnica
+
+| Camada | Tecnologia |
+|--------|-----------|
+| Backend | Ruby on Rails 7.1 |
+| Frontend | Vue 3 (Composition API + `<script setup>`) |
+| CSS | Tailwind CSS (sem CSS customizado) |
+| Build | Vite |
+| Jobs | Sidekiq + Redis |
+| Banco | PostgreSQL 16 (pgvector) |
+| Containers | Docker Compose |
+| CI/CD | GitHub Actions → VPS via SSH |
+
+---
+
+## Funcionalidades Customizadas: Kanban Multi-Tenant
+
+### Conceito
+Cada `Account` tem seu próprio Kanban isolado. As colunas (stages) são configuradas por conta. Cada card do Kanban (`KanbanItem`) é vinculado a uma conversa do Chatwoot e ao telefone do contato.
+
+### Modelo de Dados
+
+```
+Account (multi-tenant)
+  └── KanbanBoard (1 por account)
+        └── KanbanStage (colunas ordenadas)
+              └── KanbanItem (cards)
+                    ├── conversation_id → Conversation
+                    ├── contact_phone   → string
+                    ├── assignee_id     → User
+                    ├── title
+                    ├── description
+                    ├── position        → integer (ordenação)
+                    └── metadata        → jsonb
+```
+
+### Arquivos a Criar
+
+```
+app/
+  models/
+    kanban_board.rb
+    kanban_stage.rb
+    kanban_item.rb
+  controllers/
+    api/v1/accounts/
+      kanban_boards_controller.rb
+      kanban_stages_controller.rb
+      kanban_items_controller.rb
+  services/
+    kanban/
+      move_item_service.rb        # move card entre stages + dispara automações
+      webhook_dispatcher_service.rb
+  javascript/
+    dashboard/
+      components/
+        kanban/
+          KanbanBoard.vue
+          KanbanStage.vue
+          KanbanCard.vue
+          KanbanCardModal.vue
+db/
+  migrate/
+    YYYYMMDD_create_kanban_boards.rb
+    YYYYMMDD_create_kanban_stages.rb
+    YYYYMMDD_create_kanban_items.rb
+spec/
+  models/
+    kanban_item_spec.rb
+  services/
+    kanban/move_item_service_spec.rb
+```
+
+---
+
+## Automações por Etapa
+
+Quando um `KanbanItem` é movido para uma stage, o sistema executa automaticamente as automações configuradas para aquela stage:
+
+- Enviar mensagem template via WhatsApp
+- Atribuir conversa a agente
+- Adicionar label à conversa
+- Disparar webhook externo
+- Agendar follow-up
+
+As automações são configuradas por `KanbanStage` e armazenadas em `jsonb`.
+
+---
+
+## Webhooks por Etapa e Geral
+
+### Webhook por Stage
+Cada `KanbanStage` pode ter uma URL de webhook configurada. Quando um card entra nessa stage, um POST é enviado:
+
+```json
+{
+  "event": "kanban.item.stage_changed",
+  "account_id": 1,
+  "stage": { "id": 3, "name": "Proposta Enviada" },
+  "item": {
+    "id": 42,
+    "title": "Empresa XYZ",
+    "conversation_id": 100,
+    "contact_phone": "+5511999999999"
+  },
+  "timestamp": "2026-04-17T13:00:00Z"
+}
+```
+
+### Webhook Geral
+A conta pode cadastrar um webhook global que recebe todos os eventos do Kanban:
+- `kanban.item.created`
+- `kanban.item.stage_changed`
+- `kanban.item.updated`
+- `kanban.item.deleted`
+
+---
+
+## API Pública do Kanban
+
+Prefixo: `/api/v1/accounts/:account_id/kanban`
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/boards` | Lista o board da conta |
+| GET | `/stages` | Lista as stages |
+| POST | `/stages` | Cria stage |
+| PATCH | `/stages/:id` | Atualiza stage |
+| DELETE | `/stages/:id` | Remove stage |
+| GET | `/items` | Lista cards (filtrável por stage/assignee) |
+| POST | `/items` | Cria card |
+| PATCH | `/items/:id` | Atualiza card |
+| PATCH | `/items/:id/move` | Move card para outra stage |
+| DELETE | `/items/:id` | Remove card |
+
+Autenticação: `api_access_token` (padrão Chatwoot).
+
+---
+
+## KanbanItem: Vinculação com Conversa e Telefone
+
+- `conversation_id` → referência direta à `Conversation` do Chatwoot
+- `contact_phone` → número extraído do contato da conversa (WhatsApp/SMS)
+- Ao criar um `KanbanItem` a partir de uma conversa, esses campos são preenchidos automaticamente
+- A UI exibe o histórico da conversa inline no card do Kanban
+
+---
+
+## Dashboard de Negócios
+
+Rota: `/dashboard/kanban/analytics`
+
+Métricas exibidas por período (hoje / semana / mês):
+
+- Total de cards por stage
+- Taxa de conversão entre stages
+- Tempo médio em cada stage
+- Cards por agente (ranking)
+- Cards criados vs fechados
+- Receita estimada (campo opcional no card)
+
+Tecnologia: Vue 3 + Chart.js (ou Recharts se já disponível no projeto).
+
+---
+
+## Gamificação com Modo TV
+
+### Modo TV
+Tela fullscreen para exibição em TV/monitor da equipe. Ativado via `/kanban/tv`.
+
+Exibe em tempo real (via ActionCable):
+- Ranking de agentes (cards fechados no dia)
+- Placar de metas (ex: 10 propostas enviadas)
+- Últimas movimentações do Kanban
+- Alertas de cards parados há mais de X horas
+
+### Gamificação
+- Pontos por ação: mover card (+1), fechar negócio (+10), bater meta diária (+50)
+- Badge por conquista (primeiro fechamento, 10 seguidos, etc.)
+- Histórico de pontuação por agente em `AgentScore` (model a criar)
+
+---
+
+## Chatwoot Development Guidelines
+
+### Build / Test / Lint
 
 - **Setup**: `bundle install && pnpm install`
 - **Run Dev**: `pnpm dev` or `overmind start -f ./Procfile.dev`
-- **Seed Local Test Data**: `bundle exec rails db:seed` (quickly populates minimal data for standard feature verification)
-- **Seed Search Test Data**: `bundle exec rails search:setup_test_data` (bulk fixture generation for search/performance/manual load scenarios)
-- **Seed Account Sample Data (richer test data)**: `Seeders::AccountSeeder` is available as an internal utility and is exposed through Super Admin `Accounts#seed`, but can be used directly in dev workflows too:
-  - UI path: Super Admin → Accounts → Seed (enqueues `Internal::SeedAccountJob`).
-  - CLI path: `bundle exec rails runner "Internal::SeedAccountJob.perform_now(Account.find(<id>))"` (or call `Seeders::AccountSeeder.new(account: Account.find(<id>)).perform!` directly).
+- **Seed Local Test Data**: `bundle exec rails db:seed`
+- **Seed Account Sample Data**: Super Admin → Accounts → Seed ou `bundle exec rails runner "Internal::SeedAccountJob.perform_now(Account.find(<id>))"`
 - **Lint JS/Vue**: `pnpm eslint` / `pnpm eslint:fix`
 - **Lint Ruby**: `bundle exec rubocop -a`
 - **Test JS**: `pnpm test` or `pnpm test:watch`
 - **Test Ruby**: `bundle exec rspec spec/path/to/file_spec.rb`
 - **Single Test**: `bundle exec rspec spec/path/to/file_spec.rb:LINE_NUMBER`
-- **Run Project**: `overmind start -f Procfile.dev`
-- **Ruby Version**: Manage Ruby via `rbenv` and install the version listed in `.ruby-version` (e.g., `rbenv install $(cat .ruby-version)`)
-- **rbenv setup**: Before running any `bundle` or `rspec` commands, init rbenv in your shell (`eval "$(rbenv init -)"`) so the correct Ruby/Bundler versions are used
-- Always prefer `bundle exec` for Ruby CLI tasks (rspec, rake, rubocop, etc.)
+- **Ruby Version**: via `rbenv` — versão em `.ruby-version`
+- **rbenv setup**: `eval "$(rbenv init -)"`
+- Always prefer `bundle exec` for Ruby CLI tasks
 
-## Code Style
+### Code Style
 
-- **Ruby**: Follow RuboCop rules (150 character max line length)
-- **Vue/JS**: Use ESLint (Airbnb base + Vue 3 recommended)
-- **Vue Components**: Use PascalCase
-- **Events**: Use camelCase
-- **I18n**: No bare strings in templates; use i18n
-- **Error Handling**: Use custom exceptions (`lib/custom_exceptions/`)
-- **Models**: Validate presence/uniqueness, add proper indexes
-- **Type Safety**: Use PropTypes in Vue, strong params in Rails
-- **Naming**: Use clear, descriptive names with consistent casing
-- **Vue API**: Always use Composition API with `<script setup>` at the top
+- **Ruby**: RuboCop (150 char max line length)
+- **Vue/JS**: ESLint (Airbnb base + Vue 3 recommended)
+- **Vue Components**: PascalCase
+- **Events**: camelCase
+- **I18n**: Sem strings bare nos templates; usar i18n
+- **Vue API**: Sempre Composition API com `<script setup>`
 
-## Styling
+### Styling
 
-- **Tailwind Only**:  
-  - Do not write custom CSS  
-  - Do not use scoped CSS  
-  - Do not use inline styles  
-  - Always use Tailwind utility classes  
-- **Colors**: Refer to `tailwind.config.js` for color definitions
+- **Tailwind Only** — sem CSS customizado, sem scoped CSS, sem inline styles
+- **Colors**: ver `tailwind.config.js`
 
-## General Guidelines
+### General Guidelines
 
-- MVP focus: Least code change, happy-path only
-- No unnecessary defensive programming
-- Ship the happy path first: limit guards/fallbacks to what production has proven necessary, then iterate
-- Prefer minimal, readable code over elaborate abstractions; clarity beats cleverness
-- Break down complex tasks into small, testable units
-- Iterate after confirmation
-- Avoid writing specs unless explicitly asked
-- Remove dead/unreachable/unused code
-- Don’t write multiple versions or backups for the same logic — pick the best approach and implement it
-- Prefer `with_modified_env` (from spec helpers) over stubbing `ENV` directly in specs
-- Specs in parallel/reloading environments: prefer comparing `error.class.name` over constant class equality when asserting raised errors
+- MVP focus: menor mudança de código, happy-path only
+- Sem defensive programming desnecessário
+- Código minimal e legível; clareza > abstração
+- Iterar após confirmação
+- Evitar specs a menos que pedido
+- Remover código morto/inatingível
 
-## Codex Worktree Workflow
+### Commit Messages
 
-- Use a separate git worktree + branch per task to keep changes isolated.
-- Keep Codex-specific local setup under `.codex/` and use `Procfile.worktree` for worktree process orchestration.
-- The setup workflow in `.codex/environments/environment.toml` should dynamically generate per-worktree DB/port values (Rails, Vite, Redis DB index) to avoid collisions.
-- Start each worktree with its own Overmind socket/title so multiple instances can run at the same time.
+- Conventional Commits: `type(scope): subject`
+- Exemplo: `feat(kanban): add stage webhook dispatcher`
+- Não referenciar Claude nos commits
 
-## Commit Messages
+### PR Description Format
 
-- Prefer Conventional Commits: `type(scope): subject` (scope optional)
-- Example: `feat(auth): add user authentication`
-- Don't reference Claude in commit messages
+- Parágrafo curto descrevendo a mudança para o usuário
+- Seção `Closes` com links de issues
+- `How to test` para features, `How to reproduce` para bugfixes
 
-## PR Description Format
+### Project-Specific
 
-- Start with a short, user-facing paragraph describing the product change.
-- Add a `Closes` section with relevant issue links (GitHub, Linear, etc.).
-- For feature PRs, add `How to test` from a product/UX standpoint.
-- For bugfix PRs, use `How to reproduce` when helpful.
-- Optionally add a `What changed` section for implementation highlights.
-- Do not add a `How this was tested` section listing specs/commands.
+- **Translations**: Atualizar apenas `en.yml` e `en.json`
+- **Frontend**: Usar `components-next/` para message bubbles
 
-## Project-Specific
+### Ruby Best Practices
 
-- **Translations**:
-  - Only update `en.yml` and `en.json`
-  - Other languages are handled by the community
-  - Backend i18n → `en.yml`, Frontend i18n → `en.json`
-- **Frontend**:
-  - Use `components-next/` for message bubbles (the rest is being deprecated)
+- Usar definições compactas de `module/class`; evitar estilo aninhado
 
-## Ruby Best Practices
+### Enterprise Edition Notes
 
-- Use compact `module/class` definitions; avoid nested styles
+- Overlay Enterprise em `enterprise/` — sempre verificar arquivos correspondentes ao editar core
+- Novos endpoints/serviços: considerar override ou extension point via `prepend_mod_with`
+- Specs Enterprise: `spec/enterprise/`
 
-## Enterprise Edition Notes
+### Branding
 
-- Chatwoot has an Enterprise overlay under `enterprise/` that extends/overrides OSS code.
-- When you add or modify core functionality, always check for corresponding files in `enterprise/` and keep behavior compatible.
-- Follow the Enterprise development practices documented here:
-  - https://chatwoot.help/hc/handbook/articles/developing-enterprise-edition-features-38
-
-Practical checklist for any change impacting core logic or public APIs
-- Search for related files in both trees before editing (e.g., `rg -n "FooService|ControllerName|ModelName" app enterprise`).
-- If adding new endpoints, services, or models, consider whether Enterprise needs:
-  - An override (e.g., `enterprise/app/...`), or
-  - An extension point (e.g., `prepend_mod_with`, hooks, configuration) to avoid hard forks.
-- Avoid hardcoding instance- or plan-specific behavior in OSS; prefer configuration, feature flags, or extension points consumed by Enterprise.
-- Keep request/response contracts stable across OSS and Enterprise; update both sets of routes/controllers when introducing new APIs.
-- When renaming/moving shared code, mirror the change in `enterprise/` to prevent drift.
-- Tests: Add Enterprise-specific specs under `spec/enterprise`, mirroring OSS spec layout where applicable.
-- When modifying existing OSS features for Enterprise-only behavior, add an Enterprise module (via `prepend_mod_with`/`include_mod_with`) instead of editing OSS files directly—especially for policies, controllers, and services. For Enterprise-exclusive features, place code directly under `enterprise/`.
-
-## Branding / White-labeling note
-
-- For user-facing strings that currently contain "Chatwoot" but should adapt to branded/self-hosted installs, prefer applying `replaceInstallationName` from `shared/composables/useBranding` in the UI layer (for example tooltip and suggestion labels) instead of adding hardcoded brand-specific copy.
+- Usar `replaceInstallationName` de `shared/composables/useBranding` para strings com "Chatwoot"

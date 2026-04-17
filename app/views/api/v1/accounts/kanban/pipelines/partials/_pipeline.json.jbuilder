@@ -1,0 +1,12 @@
+json.id pipeline.id
+json.account_id pipeline.account_id
+json.name pipeline.name
+json.description pipeline.description
+json.position pipeline.position
+json.is_default pipeline.is_default
+json.is_active pipeline.is_active
+json.visibility_type pipeline.visibility_type
+json.visible_to_user_ids pipeline.visible_to_user_ids
+json.stages_count pipeline.kanban_stages.size
+json.created_at pipeline.created_at.to_i
+json.updated_at pipeline.updated_at.to_i

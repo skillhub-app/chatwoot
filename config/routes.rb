@@ -107,6 +107,37 @@ Rails.application.routes.draw do
               post :reauthorize_page
             end
           end
+          namespace :kanban do
+            get 'items', to: 'global_items#index'
+            scope :gamification, controller: 'gamification' do
+              get :rankings
+              get :overview
+              get :recent_wins
+            end
+            resources :goals, only: [:index] do
+              collection { post :upsert }
+            end
+            resources :pipelines, only: [:index, :show, :create, :update, :destroy] do
+              resources :stages, only: [:index, :show, :create, :update, :destroy] do
+                patch :reorder, on: :member
+              end
+              resources :items, only: [:index, :show, :create, :update, :destroy] do
+                member do
+                  patch :move
+                  patch :won
+                  patch :lost
+                  patch :reopen
+                end
+                resources :tasks, only: [:index, :create, :update, :destroy] do
+                  patch :complete, on: :member
+                end
+                resources :notes, only: [:index, :create, :destroy]
+                resources :activities, only: [:index]
+                resources :attachments, only: [:index, :create, :destroy]
+              end
+            end
+            resources :webhooks, only: [:index, :show, :create, :update, :destroy]
+          end
           resources :canned_responses, only: [:index, :create, :update, :destroy]
           resources :automation_rules, only: [:index, :create, :show, :update, :destroy] do
             post :clone

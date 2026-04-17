@@ -10,6 +10,7 @@ import { useUISettings } from 'dashboard/composables/useUISettings';
 import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 
 import AccordionItem from 'dashboard/components/Accordion/AccordionItem.vue';
+import KanbanCRMWidget from 'dashboard/components/kanban/KanbanCRMWidget.vue';
 import ContactConversations from './ContactConversations.vue';
 import ConversationAction from './ConversationAction.vue';
 import ConversationParticipant from './ConversationParticipant.vue';
@@ -153,6 +154,17 @@ onMounted(() => {
             v-if="element.name === 'conversation_actions'"
             class="conversation--actions"
           >
+            <!-- Kanban CRM Widget — always visible at top -->
+            <AccordionItem
+              :title="$t('CONVERSATION_SIDEBAR.ACCORDION.KANBAN_CRM')"
+              :is-open="isContactSidebarItemOpen('is_kanban_crm_open')"
+              @toggle="
+                value => toggleSidebarUIState('is_kanban_crm_open', value)
+              "
+            >
+              <KanbanCRMWidget :conversation-id="conversationId" />
+            </AccordionItem>
+
             <AccordionItem
               :title="$t('CONVERSATION_SIDEBAR.ACCORDION.CONVERSATION_ACTIONS')"
               :is-open="isContactSidebarItemOpen('is_conv_actions_open')"

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_04_10_092753) do
+ActiveRecord::Schema[7.1].define(version: 2026_04_17_220000) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -381,11 +381,11 @@ ActiveRecord::Schema[7.1].define(version: 2026_04_10_092753) do
     t.integer "sync_status"
     t.datetime "last_synced_at"
     t.datetime "last_sync_attempted_at"
+    t.index ["account_id", "sync_status"], name: "index_captain_documents_on_account_id_and_sync_status"
     t.index ["account_id"], name: "index_captain_documents_on_account_id"
     t.index ["assistant_id", "external_link"], name: "index_captain_documents_on_assistant_id_and_external_link", unique: true
     t.index ["assistant_id"], name: "index_captain_documents_on_assistant_id"
     t.index ["status"], name: "index_captain_documents_on_status"
-    t.index ["account_id", "sync_status"], name: "index_captain_documents_on_account_id_and_sync_status"
   end
 
   create_table "captain_inboxes", force: :cascade do |t|
@@ -934,6 +934,157 @@ ActiveRecord::Schema[7.1].define(version: 2026_04_10_092753) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.jsonb "settings", default: {}
+  end
+
+  create_table "kanban_activities", force: :cascade do |t|
+    t.bigint "kanban_item_id", null: false
+    t.bigint "author_id"
+    t.string "action_type", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["author_id"], name: "index_kanban_activities_on_author_id"
+    t.index ["kanban_item_id", "created_at"], name: "index_kanban_activities_on_kanban_item_id_and_created_at"
+    t.index ["kanban_item_id"], name: "index_kanban_activities_on_kanban_item_id"
+  end
+
+  create_table "kanban_attachments", force: :cascade do |t|
+    t.bigint "kanban_item_id", null: false
+    t.bigint "uploaded_by_id", null: false
+    t.string "file_name", null: false
+    t.integer "file_size"
+    t.string "file_type"
+    t.string "url", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["kanban_item_id"], name: "index_kanban_attachments_on_kanban_item_id"
+    t.index ["uploaded_by_id"], name: "index_kanban_attachments_on_uploaded_by_id"
+  end
+
+  create_table "kanban_automations", force: :cascade do |t|
+    t.bigint "pipeline_id", null: false
+    t.string "name", null: false
+    t.bigint "trigger_stage_id", null: false
+    t.bigint "action_stage_id"
+    t.jsonb "conditions", default: {}, null: false
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["action_stage_id"], name: "index_kanban_automations_on_action_stage_id"
+    t.index ["pipeline_id", "active"], name: "index_kanban_automations_on_pipeline_id_and_active"
+    t.index ["pipeline_id"], name: "index_kanban_automations_on_pipeline_id"
+    t.index ["trigger_stage_id"], name: "index_kanban_automations_on_trigger_stage_id"
+  end
+
+  create_table "kanban_goals", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "assignee_id", null: false
+    t.integer "month", null: false
+    t.integer "year", null: false
+    t.decimal "target_value", precision: 15, scale: 2, default: "0.0"
+    t.integer "target_won", default: 0
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "assignee_id", "year", "month"], name: "idx_on_account_id_assignee_id_year_month_3cf2446bc5", unique: true
+  end
+
+  create_table "kanban_items", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "pipeline_id", null: false
+    t.bigint "stage_id", null: false
+    t.bigint "conversation_id"
+    t.bigint "assignee_id"
+    t.string "contact_phone"
+    t.string "title", null: false
+    t.decimal "value", precision: 15, scale: 2, default: "0.0"
+    t.integer "position", default: 0, null: false
+    t.datetime "won_at"
+    t.datetime "lost_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.string "source"
+    t.string "temperature"
+    t.integer "probability", default: 0
+    t.date "expected_close_date"
+    t.integer "score", default: 0
+    t.jsonb "tags", default: [], null: false
+    t.index ["account_id", "pipeline_id"], name: "index_kanban_items_on_account_id_and_pipeline_id"
+    t.index ["account_id"], name: "index_kanban_items_on_account_id"
+    t.index ["assignee_id"], name: "index_kanban_items_on_assignee_id"
+    t.index ["conversation_id"], name: "index_kanban_items_on_conversation_id"
+    t.index ["pipeline_id"], name: "index_kanban_items_on_pipeline_id"
+    t.index ["source"], name: "index_kanban_items_on_source"
+    t.index ["stage_id", "position"], name: "index_kanban_items_on_stage_id_and_position"
+    t.index ["stage_id"], name: "index_kanban_items_on_stage_id"
+    t.index ["temperature"], name: "index_kanban_items_on_temperature"
+  end
+
+  create_table "kanban_notes", force: :cascade do |t|
+    t.bigint "kanban_item_id", null: false
+    t.bigint "author_id", null: false
+    t.text "content", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["author_id"], name: "index_kanban_notes_on_author_id"
+    t.index ["kanban_item_id"], name: "index_kanban_notes_on_kanban_item_id"
+  end
+
+  create_table "kanban_pipelines", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.string "name", null: false
+    t.text "description"
+    t.integer "position", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.boolean "is_default", default: false, null: false
+    t.boolean "is_active", default: true, null: false
+    t.string "visibility_type", default: "all", null: false
+    t.jsonb "visible_to_user_ids", default: []
+    t.index ["account_id", "position"], name: "index_kanban_pipelines_on_account_id_and_position"
+    t.index ["account_id"], name: "index_kanban_pipelines_on_account_id"
+  end
+
+  create_table "kanban_stages", force: :cascade do |t|
+    t.bigint "pipeline_id", null: false
+    t.string "name", null: false
+    t.integer "position", default: 0, null: false
+    t.string "color", default: "#6366f1"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.boolean "is_won", default: false, null: false
+    t.boolean "is_lost", default: false, null: false
+    t.integer "probability", default: 0, null: false
+    t.index ["pipeline_id", "position"], name: "index_kanban_stages_on_pipeline_id_and_position"
+    t.index ["pipeline_id"], name: "index_kanban_stages_on_pipeline_id"
+  end
+
+  create_table "kanban_tasks", force: :cascade do |t|
+    t.bigint "kanban_item_id", null: false
+    t.bigint "assignee_id"
+    t.string "title", null: false
+    t.integer "priority", default: 1, null: false
+    t.date "due_date"
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.text "description"
+    t.datetime "due_at"
+    t.index ["assignee_id"], name: "index_kanban_tasks_on_assignee_id"
+    t.index ["kanban_item_id", "completed_at"], name: "index_kanban_tasks_on_kanban_item_id_and_completed_at"
+    t.index ["kanban_item_id"], name: "index_kanban_tasks_on_kanban_item_id"
+  end
+
+  create_table "kanban_webhooks", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "pipeline_id"
+    t.string "url", null: false
+    t.jsonb "events", default: [], null: false
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "active"], name: "index_kanban_webhooks_on_account_id_and_active"
+    t.index ["account_id"], name: "index_kanban_webhooks_on_account_id"
+    t.index ["pipeline_id"], name: "index_kanban_webhooks_on_pipeline_id"
   end
 
   create_table "labels", force: :cascade do |t|
