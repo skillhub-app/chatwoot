@@ -4,7 +4,7 @@ class Enterprise::Billing::CreateStripeCustomerService
   DEFAULT_QUANTITY = 2
 
   def perform
-    return if existing_subscription?
+    return false if existing_subscription?
 
     customer_id = prepare_customer_id
     subscription = Stripe::Subscription.create(customer: customer_id, items: [{ price: price_id, quantity: default_quantity }])
@@ -13,6 +13,7 @@ class Enterprise::Billing::CreateStripeCustomerService
 
     account.update!(custom_attributes: custom_attributes)
     Enterprise::Billing::ReconcilePlanFeaturesService.new(account: account).perform
+    true
   end
 
   private
