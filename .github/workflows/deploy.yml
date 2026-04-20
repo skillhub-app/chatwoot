@@ -25,12 +25,14 @@ jobs:
           script: |
             set -e
 
+            APP_DIR=/opt/chatwoot
+
             # Clone repo if not exists
-            if [ ! -d /opt/chatwoot ]; then
-              git clone https://github.com/skillhub-app/chatwoot.git /opt/chatwoot
+            if [ ! -d "$APP_DIR" ]; then
+              git clone https://github.com/skillhub-app/chatwoot.git "$APP_DIR"
             fi
 
-            cd /opt/chatwoot
+            cd "$APP_DIR"
 
             echo "Pulling latest code..."
             git fetch origin main
@@ -40,7 +42,6 @@ jobs:
             docker build -f docker/dockerfiles/rails.Dockerfile -t volps/chatwoot:latest .
 
             echo "Running database migrations..."
-            cd /opt/volps
             docker compose run --rm rails bundle exec rails db:migrate
 
             echo "Restarting services..."
