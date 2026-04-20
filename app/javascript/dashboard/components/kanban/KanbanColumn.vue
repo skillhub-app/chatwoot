@@ -179,7 +179,6 @@ function onChange(event) {
       v-model="items"
       item-key="id"
       group="kanban"
-      handle=".drag-handle"
       :animation="200"
       :force-fallback="false"
       ghost-class="opacity-40 ring-2 ring-woot-400 ring-offset-1"

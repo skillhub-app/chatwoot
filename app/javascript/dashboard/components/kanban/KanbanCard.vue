@@ -70,39 +70,13 @@ const hasAttachments = computed(() => props.item.attachments_count > 0);
 
 <template>
   <div
-    class="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 select-none hover:shadow-md transition-shadow duration-150 group/card"
+    class="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 select-none hover:shadow-md transition-shadow duration-150 group/card cursor-grab active:cursor-grabbing"
     :style="{ borderLeftColor: stageColor, borderLeftWidth: '3px' }"
+    @click="emit('click', item)"
   >
-    <!-- Header row: drag handle + title + status -->
-    <div class="flex items-start gap-1.5 px-2 pt-2.5 pb-0">
-      <!-- Drag handle (grippy dots) — Sortable only drags via this element -->
-      <div
-        class="drag-handle mt-[3px] shrink-0 cursor-grab active:cursor-grabbing opacity-20 group-hover/card:opacity-60 transition-opacity"
-        title="Arraste para mover"
-      >
-        <svg
-          width="10"
-          height="16"
-          viewBox="0 0 10 16"
-          fill="currentColor"
-          class="text-slate-400"
-        >
-          <circle cx="2" cy="2" r="1.5" />
-          <circle cx="8" cy="2" r="1.5" />
-          <circle cx="2" cy="6" r="1.5" />
-          <circle cx="8" cy="6" r="1.5" />
-          <circle cx="2" cy="10" r="1.5" />
-          <circle cx="8" cy="10" r="1.5" />
-          <circle cx="2" cy="14" r="1.5" />
-          <circle cx="8" cy="14" r="1.5" />
-        </svg>
-      </div>
-
-      <!-- Clickable content area -->
-      <div
-        class="flex-1 min-w-0 cursor-pointer pb-2.5"
-        @click="emit('click', item)"
-      >
+    <!-- Card content -->
+    <div class="flex items-start px-2 pt-2.5 pb-0">
+      <div class="flex-1 min-w-0 pb-2.5">
         <!-- Title + status badge -->
         <div class="flex items-start justify-between gap-2 mb-1.5">
           <p
