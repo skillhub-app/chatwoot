@@ -33,7 +33,7 @@ jobs:
             git reset --hard origin/main
 
             echo "=== Building Docker image ==="
-            docker build -f docker/dockerfiles/rails.Dockerfile -t volps/chatwoot:latest .
+            docker build -f docker/Dockerfile -t volps/chatwoot:latest .
 
             echo "=== Running migrations ==="
             RAILS_ID=$(docker ps --filter name=chatwoot_rails --format "{{.ID}}" | head -1)
