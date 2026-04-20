@@ -19,35 +19,45 @@ jobs:
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
-          password: ${{ secrets.PASSWORD }}
+          key: ${{ secrets.SSH_KEY }}
           port: 22
-          command_timeout: 20m
+          command_timeout: 30m
           script: |
             set -e
+            REPO=/opt/volps/chatwoot/repo
+            STACK_DIR=/opt/volps/chatwoot
 
-            APP_DIR=/opt/chatwoot
-
-            # Clone repo if not exists
-            if [ ! -d "$APP_DIR" ]; then
-              git clone https://github.com/skillhub-app/chatwoot.git "$APP_DIR"
-            fi
-
-            cd "$APP_DIR"
-
-            echo "Pulling latest code..."
+            echo "=== Pulling latest code ==="
+            cd "$REPO"
             git fetch origin main
             git reset --hard origin/main
 
-            echo "Building Docker image..."
+            echo "=== Building Docker image ==="
             docker build -f docker/dockerfiles/rails.Dockerfile -t volps/chatwoot:latest .
 
-            echo "Running database migrations..."
-            docker compose run --rm rails bundle exec rails db:migrate
+            echo "=== Running migrations ==="
+            RAILS_ID=$(docker ps --filter name=chatwoot_rails --format "{{.ID}}" | head -1)
+            if [ -n "$RAILS_ID" ]; then
+              docker exec "$RAILS_ID" bundle exec rails db:migrate
+            fi
 
-            echo "Restarting services..."
-            docker compose up -d --remove-orphans rails sidekiq
+            echo "=== Deploying stack ==="
+            docker stack deploy -c "$STACK_DIR/stack.yml" chatwoot --with-registry-auth
 
-            echo "Cleaning up old images..."
+            echo "=== Waiting for rails to restart ==="
+            sleep 20
+
+            echo "=== Running migrations on new container ==="
+            for i in $(seq 1 6); do
+              RAILS_ID=$(docker ps --filter name=chatwoot_rails --format "{{.ID}}" | head -1)
+              if [ -n "$RAILS_ID" ]; then
+                docker exec "$RAILS_ID" bundle exec rails db:migrate && break
+              fi
+              echo "Waiting for container... (${i}/6)"
+              sleep 10
+            done
+
+            echo "=== Cleaning old images ==="
             docker image prune -f
 
-            echo "Deploy complete."
+            echo "=== Deploy complete ==="
