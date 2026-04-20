@@ -19,8 +19,9 @@
 class KanbanActivity < ApplicationRecord
   ACTION_TYPES = %w[
     created moved assigned value_changed note_added
-    task_created task_completed file_attached won lost
-    temperature_changed score_changed source_changed
+    task_created task_completed file_attached won lost reopened
+    temperature_changed score_changed source_changed probability_changed
+    conversation_linked phone_changed
   ].freeze
 
   belongs_to :kanban_item

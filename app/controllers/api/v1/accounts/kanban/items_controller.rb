@@ -34,18 +34,49 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
   end
 
   def update
-    prev_stage_id    = @item.stage_id
-    prev_assignee_id = @item.assignee_id
-    prev_value       = @item.value
+    prev = @item.slice(:stage_id, :assignee_id, :value, :temperature, :score, :source, :conversation_id, :contact_phone)
 
     @item.update!(item_params)
 
-    if @item.stage_id != prev_stage_id
+    if @item.stage_id != prev['stage_id']
       auto_update_won_lost(@item.stage)
-      log_activity('moved', from_stage: prev_stage_id, to_stage: @item.stage_id)
+      from_stage = @pipeline.kanban_stages.find_by(id: prev['stage_id'])
+      to_stage   = @item.stage
+      log_activity('moved',
+                   from_stage: prev['stage_id'], to_stage: @item.stage_id,
+                   from_stage_name: from_stage&.name, to_stage_name: to_stage&.name,
+                   description: "#{from_stage&.name} → #{to_stage&.name}")
     end
-    log_activity('assigned', assignee_id: @item.assignee_id) if @item.assignee_id != prev_assignee_id
-    log_activity('value_changed', from: prev_value, to: @item.value) if @item.value != prev_value
+    if @item.assignee_id != prev['assignee_id']
+      assignee = @item.assignee
+      log_activity('assigned', assignee_id: @item.assignee_id,
+                               assignee_name: assignee&.name,
+                               description: assignee ? "Atribuído a #{assignee.name}" : 'Responsável removido')
+    end
+    if @item.value.to_f != prev['value'].to_f
+      log_activity('value_changed', from: prev['value'], to: @item.value,
+                                    description: "R$ #{prev['value']} → R$ #{@item.value}")
+    end
+    if @item.temperature != prev['temperature']
+      log_activity('temperature_changed', from: prev['temperature'], to: @item.temperature,
+                                          description: "#{prev['temperature']} → #{@item.temperature}")
+    end
+    if @item.score.to_i != prev['score'].to_i
+      log_activity('score_changed', from: prev['score'], to: @item.score,
+                                    description: "Score #{prev['score']} → #{@item.score}")
+    end
+    if @item.source != prev['source']
+      log_activity('source_changed', from: prev['source'], to: @item.source,
+                                     description: "Origem: #{prev['source']} → #{@item.source}")
+    end
+    if @item.conversation_id != prev['conversation_id'] && @item.conversation_id.present?
+      log_activity('conversation_linked', conversation_id: @item.conversation_id,
+                                          description: "Conversa ##{@item.conversation_id} vinculada")
+    end
+    if @item.contact_phone != prev['contact_phone'] && @item.contact_phone.present?
+      log_activity('phone_changed', phone: @item.contact_phone,
+                                    description: "Telefone: #{@item.contact_phone}")
+    end
   end
 
   def destroy
@@ -57,8 +88,14 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
     prev_stage_id = @item.stage_id
     stage = @pipeline.kanban_stages.find(params.require(:stage_id))
     @item.update!(stage: stage, position: params[:position] || @item.position)
-    auto_update_won_lost(stage) if prev_stage_id != stage.id
-    log_activity('moved', from_stage: prev_stage_id, to_stage: stage.id) if prev_stage_id != stage.id
+    if prev_stage_id != stage.id
+      auto_update_won_lost(stage)
+      from_stage = @pipeline.kanban_stages.find_by(id: prev_stage_id)
+      log_activity('moved',
+                   from_stage: prev_stage_id, to_stage: stage.id,
+                   from_stage_name: from_stage&.name, to_stage_name: stage.name,
+                   description: "#{from_stage&.name} → #{stage.name}")
+    end
   end
 
   def won
@@ -70,8 +107,13 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
     attrs[:stage_id] = won_stage.id if won_stage && @item.stage_id != won_stage.id
 
     @item.update!(attrs)
-    log_activity('won') unless already_won
-    log_activity('moved', from_stage: prev_stage_id, to_stage: won_stage.id) if won_stage && prev_stage_id != won_stage.id
+    log_activity('won', description: '🏆 Lead marcado como Ganho') unless already_won
+    if won_stage && prev_stage_id != won_stage.id
+      from_stage = @pipeline.kanban_stages.find_by(id: prev_stage_id)
+      log_activity('moved', from_stage: prev_stage_id, to_stage: won_stage.id,
+                            from_stage_name: from_stage&.name, to_stage_name: won_stage.name,
+                            description: "#{from_stage&.name} → #{won_stage.name}")
+    end
   end
 
   def lost
@@ -83,13 +125,18 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
     attrs[:stage_id] = lost_stage.id if lost_stage && @item.stage_id != lost_stage.id
 
     @item.update!(attrs)
-    log_activity('lost') unless already_lost
-    log_activity('moved', from_stage: prev_stage_id, to_stage: lost_stage.id) if lost_stage && prev_stage_id != lost_stage.id
+    log_activity('lost', description: '❌ Lead marcado como Perdido') unless already_lost
+    if lost_stage && prev_stage_id != lost_stage.id
+      from_stage = @pipeline.kanban_stages.find_by(id: prev_stage_id)
+      log_activity('moved', from_stage: prev_stage_id, to_stage: lost_stage.id,
+                            from_stage_name: from_stage&.name, to_stage_name: lost_stage.name,
+                            description: "#{from_stage&.name} → #{lost_stage.name}")
+    end
   end
 
   def reopen
     @item.update!(won_at: nil, lost_at: nil)
-    log_activity('reopened')
+    log_activity('reopened', description: 'Lead reaberto')
   end
 
   private
@@ -97,10 +144,10 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
   def auto_update_won_lost(stage)
     if stage.is_won?
       @item.update_columns(won_at: Time.current, lost_at: nil)
-      log_activity('won')
+      log_activity('won', description: '🏆 Lead marcado como Ganho')
     elsif stage.is_lost?
       @item.update_columns(lost_at: Time.current, won_at: nil)
-      log_activity('lost')
+      log_activity('lost', description: '❌ Lead marcado como Perdido')
     end
   end
 

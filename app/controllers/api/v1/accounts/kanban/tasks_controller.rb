@@ -9,7 +9,7 @@ class Api::V1::Accounts::Kanban::TasksController < Api::V1::Accounts::BaseContro
   def create
     @task = @item.kanban_tasks.new(task_params)
     @task.save!
-    log_activity('task_created', title: @task.title)
+    log_activity('task_created', title: @task.title, description: "Tarefa criada: #{@task.title}")
   end
 
   def update
@@ -23,7 +23,7 @@ class Api::V1::Accounts::Kanban::TasksController < Api::V1::Accounts::BaseContro
 
   def complete
     @task.update!(completed_at: @task.completed? ? nil : Time.current)
-    log_activity('task_completed', title: @task.title, completed: @task.completed?) if @task.completed?
+    log_activity('task_completed', title: @task.title, description: "Tarefa concluída: #{@task.title}") if @task.completed?
   end
 
   private

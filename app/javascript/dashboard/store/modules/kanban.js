@@ -347,9 +347,17 @@ const actions = {
     }
   },
   createTask: async ({ commit }, { pipelineId, itemId, ...d }) => {
-    const { data } = await tasksAPI.create(pipelineId, itemId, d);
-    commit('ADD_ITEM_TASK', { itemId, task: data.payload });
-    return data.payload;
+    try {
+      const { data } = await tasksAPI.create(pipelineId, itemId, d);
+      commit('ADD_ITEM_TASK', { itemId, task: data.payload });
+      return data.payload;
+    } catch (e) {
+      const msg =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        'Erro ao criar tarefa';
+      throw new Error(msg);
+    }
   },
   updateTask: async ({ commit }, { pipelineId, itemId, id, ...d }) => {
     const { data } = await tasksAPI.update(pipelineId, itemId, id, d);

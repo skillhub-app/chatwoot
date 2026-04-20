@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useAccount } from 'dashboard/composables/useAccount';
+/* global axios */
 
 const props = defineProps({
   item: { type: Object, default: null },
@@ -246,12 +247,14 @@ const newTask = ref({
   due_at: '',
 });
 const savingTask = ref(false);
+const taskError = ref('');
 const editingTaskId = ref(null);
 const taskEditForm = ref({});
 
 async function createTask() {
   if (!newTask.value.title.trim()) return;
   savingTask.value = true;
+  taskError.value = '';
   try {
     await store.dispatch('kanban/createTask', {
       pipelineId: props.pipelineId,
@@ -270,6 +273,12 @@ async function createTask() {
       due_at: '',
     };
     showNewTaskForm.value = false;
+    store.dispatch('kanban/fetchActivities', {
+      pipelineId: props.pipelineId,
+      itemId: props.item.id,
+    });
+  } catch (e) {
+    taskError.value = e.message || 'Erro ao criar tarefa. Tente novamente.';
   } finally {
     savingTask.value = false;
   }
@@ -288,6 +297,10 @@ async function toggleTask(task) {
       pipelineId: props.pipelineId,
       itemId: props.item.id,
       id: task.id,
+    });
+    store.dispatch('kanban/fetchActivities', {
+      pipelineId: props.pipelineId,
+      itemId: props.item.id,
     });
   }
 }
@@ -430,13 +443,47 @@ const ACTIVITY_ICONS = {
   file_attached: { icon: 'i-lucide-paperclip', cls: 'text-slate-500' },
   won: { icon: 'i-lucide-trophy', cls: 'text-yellow-500' },
   lost: { icon: 'i-lucide-x-circle', cls: 'text-red-500' },
+  reopened: { icon: 'i-lucide-rotate-ccw', cls: 'text-blue-400' },
   temperature_changed: { icon: 'i-lucide-thermometer', cls: 'text-orange-500' },
   score_changed: { icon: 'i-lucide-star', cls: 'text-yellow-400' },
+  source_changed: { icon: 'i-lucide-tag', cls: 'text-slate-500' },
+  conversation_linked: {
+    icon: 'i-lucide-message-square',
+    cls: 'text-woot-500',
+  },
+  phone_changed: { icon: 'i-lucide-phone', cls: 'text-slate-500' },
 };
+
+const ACTIVITY_LABELS = {
+  created: 'Lead criado',
+  moved: 'Etapa alterada',
+  assigned: 'Responsável alterado',
+  value_changed: 'Valor alterado',
+  note_added: 'Nota adicionada',
+  task_created: 'Tarefa criada',
+  task_completed: 'Tarefa concluída',
+  file_attached: 'Arquivo anexado',
+  won: 'Lead ganho',
+  lost: 'Lead perdido',
+  reopened: 'Lead reaberto',
+  temperature_changed: 'Temperatura alterada',
+  score_changed: 'Score alterado',
+  source_changed: 'Origem alterada',
+  conversation_linked: 'Conversa vinculada',
+  phone_changed: 'Telefone atualizado',
+};
+
 function activityIcon(type) {
   return (
     ACTIVITY_ICONS[type] || { icon: 'i-lucide-circle', cls: 'text-slate-400' }
   );
+}
+function activityLabel(act) {
+  return ACTIVITY_LABELS[act.action_type] || act.action_type.replace(/_/g, ' ');
+}
+function activityDescription(act) {
+  if (act.metadata?.description) return act.metadata.description;
+  return null;
 }
 function formatTs(ts) {
   if (!ts) return '';
@@ -458,6 +505,103 @@ const conversationLink = computed(() => {
   if (!props.item?.conversation_id) return null;
   return `/app/accounts/${accountId.value}/conversations/${props.item.conversation_id}`;
 });
+
+// ─── WhatsApp / Start conversation ───────────────────────────────────────────
+const inboxes = ref([]);
+const showStartConversation = ref(false);
+const startConvForm = ref({ inbox_id: null, message: '' });
+const startConvLoading = ref(false);
+const startConvError = ref('');
+
+async function loadInboxes() {
+  try {
+    const { data: res } = await axios.get(
+      `/api/v1/accounts/${accountId.value}/inboxes`
+    );
+    inboxes.value = (res.payload || []).filter(i =>
+      [
+        'Channel::Whatsapp',
+        'Channel::Api',
+        'Channel::Email',
+        'Channel::TwilioSms',
+      ].includes(i.channel_type)
+    );
+    if (inboxes.value.length > 0)
+      startConvForm.value.inbox_id = inboxes.value[0].id;
+  } catch {
+    inboxes.value = [];
+  }
+}
+
+async function startConversation() {
+  if (!startConvForm.value.inbox_id || !startConvForm.value.message.trim())
+    return;
+  startConvLoading.value = true;
+  startConvError.value = '';
+  try {
+    // 1. Find or create contact by phone
+    let contactId = null;
+    const phone = props.item.contact_phone;
+    if (phone) {
+      const { data: searchRes } = await axios.get(
+        `/api/v1/accounts/${accountId.value}/contacts/search`,
+        { params: { q: phone, include_contacts: true } }
+      );
+      const found = searchRes?.payload?.contacts?.[0];
+      if (found) {
+        contactId = found.id;
+      } else {
+        const { data: newContact } = await axios.post(
+          `/api/v1/accounts/${accountId.value}/contacts`,
+          { name: props.item.title, phone_number: phone }
+        );
+        contactId = newContact?.id;
+      }
+    }
+
+    // 2. Create conversation
+    const convPayload = { inbox_id: startConvForm.value.inbox_id };
+    if (contactId) convPayload.contact_id = contactId;
+    const { data: conv } = await axios.post(
+      `/api/v1/accounts/${accountId.value}/conversations`,
+      convPayload
+    );
+    const conversationId = conv?.id;
+    if (!conversationId) throw new Error('Conversa não foi criada');
+
+    // 3. Send first message
+    await axios.post(
+      `/api/v1/accounts/${accountId.value}/conversations/${conversationId}/messages`,
+      {
+        content: startConvForm.value.message.trim(),
+        message_type: 'outgoing',
+        private: false,
+      }
+    );
+
+    // 4. Link conversation to kanban item
+    await store.dispatch('kanban/updateItem', {
+      pipelineId: props.pipelineId,
+      id: props.item.id,
+      conversation_id: conversationId,
+    });
+
+    showStartConversation.value = false;
+    startConvForm.value = {
+      inbox_id: inboxes.value[0]?.id || null,
+      message: '',
+    };
+    store.dispatch('kanban/fetchActivities', {
+      pipelineId: props.pipelineId,
+      itemId: props.item.id,
+    });
+  } catch (e) {
+    startConvError.value =
+      e?.response?.data?.message || e.message || 'Erro ao iniciar conversa';
+  } finally {
+    startConvLoading.value = false;
+  }
+}
 
 const currentAssignee = computed(
   () =>
@@ -843,16 +987,16 @@ const currentAssignee = computed(
                       />
                     </div>
                     <div class="flex-1 pb-1 min-w-0">
-                      <p class="text-sm text-slate-700 dark:text-slate-300">
-                        <span class="font-medium capitalize">{{
-                          (act.action_type || '').replace(/_/g, ' ')
-                        }}</span>
-                        <span
-                          v-if="act.metadata?.description"
-                          class="text-slate-500"
-                        >
-                          — {{ act.metadata.description }}</span
-                        >
+                      <p
+                        class="text-sm text-slate-700 dark:text-slate-300 font-medium"
+                      >
+                        {{ activityLabel(act) }}
+                      </p>
+                      <p
+                        v-if="activityDescription(act)"
+                        class="text-xs text-slate-500 mt-0.5"
+                      >
+                        {{ activityDescription(act) }}
                       </p>
                       <p class="text-[10px] text-slate-400 mt-0.5">
                         {{ formatTs(act.created_at) }}
@@ -959,18 +1103,31 @@ const currentAssignee = computed(
                     class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
                   />
                 </div>
+                <p
+                  v-if="taskError"
+                  class="text-xs text-red-600 bg-red-50 rounded px-2 py-1"
+                >
+                  {{ taskError }}
+                </p>
                 <div class="flex gap-2">
                   <button
                     class="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 font-medium"
-                    @click="showNewTaskForm = false"
+                    @click="
+                      showNewTaskForm = false;
+                      taskError = '';
+                    "
                   >
                     Cancelar
                   </button>
                   <button
                     :disabled="!newTask.title.trim() || savingTask"
-                    class="text-xs px-4 py-1.5 rounded-lg bg-woot-500 text-white hover:bg-woot-600 font-medium disabled:opacity-50"
+                    class="text-xs px-4 py-1.5 rounded-lg bg-woot-500 text-white hover:bg-woot-600 font-medium disabled:opacity-50 flex items-center gap-1.5"
                     @click="createTask"
                   >
+                    <span
+                      v-if="savingTask"
+                      class="i-lucide-loader-2 size-3 animate-spin"
+                    />
                     Criar Tarefa
                   </button>
                 </div>
@@ -1280,25 +1437,23 @@ const currentAssignee = computed(
             </div>
 
             <!-- WHATSAPP / CONVERSA -->
-            <div
-              v-else-if="activeTab === 'whatsapp'"
-              class="flex flex-col items-center justify-center py-12 text-center gap-4"
-            >
-              <div v-if="conversationLink">
+            <div v-else-if="activeTab === 'whatsapp'">
+              <!-- Conversa já vinculada -->
+              <div
+                v-if="conversationLink"
+                class="flex flex-col items-center py-12 text-center gap-4"
+              >
                 <span
-                  class="i-lucide-message-square size-14 text-woot-500 mb-4 block mx-auto"
+                  class="i-lucide-message-square size-14 text-woot-500 mb-2 block mx-auto"
                 />
                 <p
-                  class="text-base font-semibold text-slate-700 dark:text-slate-200 mb-1"
+                  class="text-base font-semibold text-slate-700 dark:text-slate-200"
                 >
                   Conversa #{{ item.conversation_id }}
                 </p>
-                <p class="text-sm text-slate-400 mb-3">
-                  Abrir a conversa vinculada a este lead
-                </p>
                 <div
                   v-if="item.contact_phone"
-                  class="text-sm text-slate-500 dark:text-slate-400 mb-5 flex items-center justify-center gap-1.5"
+                  class="text-sm text-slate-500 flex items-center gap-1.5"
                 >
                   <span class="i-lucide-phone size-3.5" />{{
                     item.contact_phone
@@ -1314,12 +1469,107 @@ const currentAssignee = computed(
                   Chatwoot
                 </a>
               </div>
-              <div v-else class="text-slate-400">
-                <span
-                  class="i-lucide-message-square-off size-12 mb-3 block mx-auto opacity-40"
-                />
-                <p class="text-sm font-medium">Nenhuma conversa vinculada</p>
-                <p class="text-xs mt-1">Este lead não tem conversa associada</p>
+
+              <!-- Sem conversa — iniciar nova -->
+              <div v-else class="max-w-sm mx-auto py-8 space-y-4">
+                <div class="flex flex-col items-center text-center mb-4">
+                  <span
+                    class="i-lucide-message-square-off size-12 text-slate-300 mb-3 block"
+                  />
+                  <p
+                    class="text-sm font-medium text-slate-600 dark:text-slate-300"
+                  >
+                    Nenhuma conversa vinculada
+                  </p>
+                  <p class="text-xs text-slate-400 mt-1">
+                    Inicie uma conversa para vincular a este lead
+                  </p>
+                </div>
+
+                <button
+                  v-if="!showStartConversation"
+                  class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-woot-500 text-white font-semibold text-sm hover:bg-woot-600 transition-colors"
+                  @click="
+                    showStartConversation = true;
+                    loadInboxes();
+                  "
+                >
+                  <span class="i-lucide-send size-4" />Enviar mensagem
+                </button>
+
+                <div
+                  v-if="showStartConversation"
+                  class="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl p-4 space-y-3"
+                >
+                  <div>
+                    <label
+                      class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
+                      >Caixa de entrada</label
+                    >
+                    <select
+                      v-model="startConvForm.inbox_id"
+                      class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                    >
+                      <option v-if="inboxes.length === 0" :value="null">
+                        Carregando inboxes...
+                      </option>
+                      <option
+                        v-for="inbox in inboxes"
+                        :key="inbox.id"
+                        :value="inbox.id"
+                      >
+                        {{ inbox.name }}
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
+                      >Mensagem inicial</label
+                    >
+                    <textarea
+                      v-model="startConvForm.message"
+                      rows="3"
+                      placeholder="Digite a mensagem..."
+                      class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500 resize-none"
+                    />
+                  </div>
+                  <p
+                    v-if="startConvError"
+                    class="text-xs text-red-600 bg-red-50 rounded px-2 py-1"
+                  >
+                    {{ startConvError }}
+                  </p>
+                  <div class="flex gap-2">
+                    <button
+                      class="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100"
+                      @click="
+                        showStartConversation = false;
+                        startConvError = '';
+                      "
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      :disabled="
+                        !startConvForm.inbox_id ||
+                        !startConvForm.message.trim() ||
+                        startConvLoading
+                      "
+                      class="flex-1 flex items-center justify-center gap-1.5 text-xs px-4 py-1.5 rounded-lg bg-woot-500 text-white hover:bg-woot-600 font-medium disabled:opacity-50"
+                      @click="startConversation"
+                    >
+                      <span
+                        v-if="startConvLoading"
+                        class="i-lucide-loader-2 size-3 animate-spin"
+                      />
+                      <span v-else class="i-lucide-send size-3" />
+                      {{
+                        startConvLoading ? 'Enviando...' : 'Enviar e vincular'
+                      }}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
