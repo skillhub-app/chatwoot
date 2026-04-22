@@ -75,12 +75,19 @@ class KanbanItemsAPI extends ApiClient {
     return axios.patch(`${this.itemsUrl(pipelineId)}/${id}/won`);
   }
 
-  lost(pipelineId, id) {
-    return axios.patch(`${this.itemsUrl(pipelineId)}/${id}/lost`);
+  lost(pipelineId, id, data = {}) {
+    return axios.patch(`${this.itemsUrl(pipelineId)}/${id}/lost`, data);
   }
 
   reopen(pipelineId, id) {
     return axios.patch(`${this.itemsUrl(pipelineId)}/${id}/reopen`);
+  }
+
+  transfer(pipelineId, id, targetPipelineId, stageId) {
+    return axios.patch(`${this.itemsUrl(pipelineId)}/${id}/transfer`, {
+      target_pipeline_id: targetPipelineId,
+      stage_id: stageId,
+    });
   }
 
   delete(pipelineId, id) {
@@ -118,6 +125,28 @@ class KanbanItemSubresourceAPI extends ApiClient {
 
   complete(pipelineId, itemId, id) {
     return axios.patch(`${this.itemUrl(pipelineId, itemId)}/${id}/complete`);
+  }
+}
+
+class KanbanLostReasonsAPI extends ApiClient {
+  constructor() {
+    super('kanban/lost_reasons', { accountScoped: true });
+  }
+
+  list() {
+    return axios.get(this.url);
+  }
+
+  create(data) {
+    return axios.post(this.url, data);
+  }
+
+  update(id, data) {
+    return axios.patch(`${this.url}/${id}`, data);
+  }
+
+  delete(id) {
+    return axios.delete(`${this.url}/${id}`);
   }
 }
 
@@ -164,6 +193,7 @@ class KanbanGoalsAPI extends ApiClient {
 }
 
 export const pipelinesAPI = new KanbanPipelinesAPI();
+export const lostReasonsAPI = new KanbanLostReasonsAPI();
 export const globalItemsAPI = new KanbanGlobalItemsAPI();
 export const gamificationAPI = new KanbanGamificationAPI();
 export const goalsAPI = new KanbanGoalsAPI();

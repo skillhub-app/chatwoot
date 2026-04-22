@@ -34,7 +34,7 @@ class Api::V1::Accounts::Kanban::PipelinesController < Api::V1::Accounts::BaseCo
   def pipeline_params
     p = params.permit(
       :name, :description, :position, :is_default, :is_active,
-      :visibility_type, visible_to_user_ids: []
+      :visibility_type, visible_to_user_ids: [], settings: {}
     )
     p
   end

@@ -33,6 +33,7 @@ const pipelineStages = computed(() =>
 const TABS = [
   { id: 'general', label: 'Geral', icon: 'i-lucide-settings' },
   { id: 'stages', label: 'Etapas', icon: 'i-lucide-columns' },
+  { id: 'reasons', label: 'Motivos de Perda', icon: 'i-lucide-x-circle' },
 ];
 const activeTab = ref('general');
 
@@ -41,6 +42,7 @@ const pipelineName = ref('');
 const pipelineDescription = ref('');
 const pipelineIsDefault = ref(false);
 const pipelineIsActive = ref(true);
+const autoResolveConversation = ref(false);
 
 watch(
   selectedPipeline,
@@ -49,6 +51,8 @@ watch(
     pipelineDescription.value = p?.description ?? '';
     pipelineIsDefault.value = p?.is_default ?? false;
     pipelineIsActive.value = p?.is_active ?? true;
+    autoResolveConversation.value =
+      p?.settings?.auto_resolve_conversation ?? false;
     if (p?.id) {
       store.dispatch('kanban/fetchStages', p.id);
     }
@@ -64,6 +68,7 @@ async function savePipelineGeneral() {
     description: pipelineDescription.value.trim() || undefined,
     is_default: pipelineIsDefault.value,
     is_active: pipelineIsActive.value,
+    settings: { auto_resolve_conversation: autoResolveConversation.value },
   };
   if (!selectedPipeline.value?.id) {
     const created = await store.dispatch('kanban/createPipeline', d);
@@ -199,6 +204,55 @@ function onStageDragOver(e, idx) {
 }
 function onStageDragEnd() {
   draggingIdx.value = null;
+}
+
+// ── Lost reasons management ───────────────────────────────────────────────────
+const lostReasons = computed(() => store.getters['kanban/getLostReasons']);
+const newReasonName = ref('');
+const savingReason = ref(false);
+const editingReasonId = ref(null);
+const reasonEditForm = ref({ name: '', active: true });
+
+watch(activeTab, tab => {
+  if (tab === 'reasons') store.dispatch('kanban/fetchLostReasons');
+});
+
+async function addReason() {
+  if (!newReasonName.value.trim()) return;
+  savingReason.value = true;
+  try {
+    await store.dispatch('kanban/createLostReason', {
+      name: newReasonName.value.trim(),
+    });
+    newReasonName.value = '';
+  } finally {
+    savingReason.value = false;
+  }
+}
+
+function startEditReason(reason) {
+  editingReasonId.value = reason.id;
+  reasonEditForm.value = { name: reason.name, active: reason.active };
+}
+
+async function saveEditReason() {
+  if (!reasonEditForm.value.name?.trim()) return;
+  savingReason.value = true;
+  try {
+    await store.dispatch('kanban/updateLostReason', {
+      id: editingReasonId.value,
+      name: reasonEditForm.value.name.trim(),
+      active: reasonEditForm.value.active,
+    });
+    editingReasonId.value = null;
+  } finally {
+    savingReason.value = false;
+  }
+}
+
+async function deleteReason(id) {
+  if (!window.confirm('Excluir este motivo de perda?')) return;
+  await store.dispatch('kanban/deleteLostReason', id);
 }
 
 // ── Create new pipeline ───────────────────────────────────────────────────────
@@ -360,6 +414,30 @@ function createNewPipeline() {
                 >
               </label>
             </div>
+            <div
+              class="border border-slate-200 dark:border-slate-700 rounded-lg p-3"
+            >
+              <p
+                class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2"
+              >
+                Automações
+              </p>
+              <label class="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  v-model="autoResolveConversation"
+                  type="checkbox"
+                  class="rounded accent-woot-500 mt-0.5 shrink-0"
+                />
+                <div>
+                  <span class="text-sm text-slate-700 dark:text-slate-200"
+                    >Resolver conversa ao marcar Ganho/Perdido</span
+                  >
+                  <p class="text-xs text-slate-400 mt-0.5">
+                    Resolve automaticamente a conversa vinculada ao lead
+                  </p>
+                </div>
+              </label>
+            </div>
 
             <div class="flex gap-2 pt-2">
               <button
@@ -385,6 +463,131 @@ function createNewPipeline() {
               >
                 Excluir Funil
               </button>
+            </div>
+          </div>
+
+          <!-- ── REASONS TAB ───────────────────────────────────────────────── -->
+          <div v-else-if="activeTab === 'reasons'" class="max-w-md">
+            <p
+              class="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed"
+            >
+              Motivos de perda são opções que o agente seleciona ao marcar um
+              lead como Perdido. Esta lista é compartilhada em todos os funis.
+            </p>
+
+            <!-- Existing reasons -->
+            <div class="space-y-1.5 mb-4">
+              <template v-for="reason in lostReasons" :key="reason.id">
+                <!-- Edit mode -->
+                <div
+                  v-if="editingReasonId === reason.id"
+                  class="bg-white dark:bg-slate-700 border border-woot-300 dark:border-woot-600 rounded-xl p-3 space-y-2"
+                >
+                  <input
+                    v-model="reasonEditForm.name"
+                    type="text"
+                    class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                    autofocus
+                    @keyup.enter="saveEditReason"
+                  />
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input
+                      v-model="reasonEditForm.active"
+                      type="checkbox"
+                      class="rounded accent-woot-500"
+                    />
+                    <span class="text-sm text-slate-600 dark:text-slate-300"
+                      >Ativo</span
+                    >
+                  </label>
+                  <div class="flex gap-2">
+                    <button
+                      class="px-3 py-1.5 rounded-lg text-xs border border-slate-300 text-slate-600 hover:bg-slate-100 font-medium"
+                      @click="editingReasonId = null"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      :disabled="savingReason"
+                      class="px-3 py-1.5 rounded-lg text-xs bg-woot-500 text-white hover:bg-woot-600 font-medium disabled:opacity-50"
+                      @click="saveEditReason"
+                    >
+                      Salvar
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Display mode -->
+                <div
+                  v-else
+                  class="group flex items-center gap-2 bg-white dark:bg-slate-700/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5"
+                >
+                  <span
+                    class="i-lucide-x-circle size-4 text-red-400 shrink-0"
+                  />
+                  <span
+                    class="flex-1 text-sm text-slate-700 dark:text-slate-200"
+                    :class="{ 'opacity-50 line-through': !reason.active }"
+                    >{{ reason.name }}</span
+                  >
+                  <span
+                    v-if="!reason.active"
+                    class="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded"
+                    >inativo</span
+                  >
+                  <div
+                    class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <button
+                      class="p-1 rounded text-slate-400 hover:text-woot-500 transition-colors"
+                      @click="startEditReason(reason)"
+                    >
+                      <span class="i-lucide-pencil size-3.5" />
+                    </button>
+                    <button
+                      class="p-1 rounded text-slate-400 hover:text-red-500 transition-colors"
+                      @click="deleteReason(reason.id)"
+                    >
+                      <span class="i-lucide-trash-2 size-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </template>
+
+              <div
+                v-if="lostReasons.length === 0"
+                class="text-center py-4 text-xs text-slate-400"
+              >
+                Nenhum motivo cadastrado ainda.
+              </div>
+            </div>
+
+            <!-- Add new reason -->
+            <div
+              class="border border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-4 bg-slate-50 dark:bg-slate-900/40"
+            >
+              <p
+                class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2"
+              >
+                Adicionar Motivo
+              </p>
+              <div class="flex gap-2">
+                <input
+                  v-model="newReasonName"
+                  type="text"
+                  placeholder="Ex: Preço alto, Concorrente..."
+                  class="flex-1 text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                  @keyup.enter="addReason"
+                />
+                <button
+                  :disabled="!newReasonName.trim() || savingReason"
+                  class="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-woot-500 text-white hover:bg-woot-600 font-medium disabled:opacity-50 transition-colors shrink-0"
+                  @click="addReason"
+                >
+                  <span class="i-lucide-plus size-4" />
+                  Adicionar
+                </button>
+              </div>
             </div>
           </div>
 

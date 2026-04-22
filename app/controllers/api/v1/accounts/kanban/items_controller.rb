@@ -1,6 +1,6 @@
 class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseController
-  before_action :fetch_pipeline, only: [:index, :show, :create, :update, :destroy, :move, :won, :lost, :reopen]
-  before_action :fetch_item, only: [:show, :update, :destroy, :move, :won, :lost, :reopen]
+  before_action :fetch_pipeline, only: [:index, :show, :create, :update, :destroy, :move, :won, :lost, :reopen, :transfer]
+  before_action :fetch_item, only: [:show, :update, :destroy, :move, :won, :lost, :reopen, :transfer]
 
   def index
     @items = pipeline_items.ordered
@@ -33,8 +33,26 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
     @item.save!
   end
 
+  def transfer
+    target_pipeline = Current.account.kanban_pipelines.find(params.require(:target_pipeline_id))
+    target_stage = target_pipeline.kanban_stages.find(params.require(:stage_id))
+
+    prev_pipeline_name = @pipeline.name
+    prev_stage_name    = @item.stage.name
+
+    @item.update!(pipeline: target_pipeline, stage: target_stage, position: 0)
+
+    log_activity(
+      'moved',
+      from_pipeline: @pipeline.id, to_pipeline: target_pipeline.id,
+      from_pipeline_name: prev_pipeline_name, to_pipeline_name: target_pipeline.name,
+      from_stage_name: prev_stage_name, to_stage_name: target_stage.name,
+      description: "#{prev_pipeline_name}/#{prev_stage_name} → #{target_pipeline.name}/#{target_stage.name}"
+    )
+  end
+
   def update
-    prev = @item.slice(:stage_id, :assignee_id, :value, :temperature, :score, :source, :conversation_id, :contact_phone)
+    prev = @item.slice(:stage_id, :assignee_id, :value, :temperature, :score, :source, :conversation_id, :contact_phone, :contact_id)
 
     @item.update!(item_params)
 
@@ -77,6 +95,11 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
       log_activity('phone_changed', phone: @item.contact_phone,
                                     description: "Telefone: #{@item.contact_phone}")
     end
+    if @item.contact_id != prev['contact_id'] && @item.contact_id.present?
+      contact = @item.contact
+      log_activity('contact_linked', contact_id: @item.contact_id,
+                                     description: "Contato vinculado: #{contact&.name}")
+    end
   end
 
   def destroy
@@ -99,8 +122,8 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
   end
 
   def won
-    already_won  = @item.won_at.present?
-    won_stage    = @pipeline.kanban_stages.find_by(is_won: true)
+    already_won   = @item.won_at.present?
+    won_stage     = @pipeline.kanban_stages.find_by(is_won: true)
     prev_stage_id = @item.stage_id
 
     attrs = { won_at: Time.current, lost_at: nil }
@@ -114,6 +137,8 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
                             from_stage_name: from_stage&.name, to_stage_name: won_stage.name,
                             description: "#{from_stage&.name} → #{won_stage.name}")
     end
+
+    auto_resolve_conversation if @pipeline.settings['auto_resolve_conversation']
   end
 
   def lost
@@ -121,17 +146,30 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
     lost_stage    = @pipeline.kanban_stages.find_by(is_lost: true)
     prev_stage_id = @item.stage_id
 
+    reason_id   = params[:lost_reason_id].presence
+    reason_name = reason_id ? Current.account.kanban_lost_reasons.find_by(id: reason_id)&.name : nil
+
     attrs = { lost_at: Time.current, won_at: nil }
-    attrs[:stage_id] = lost_stage.id if lost_stage && @item.stage_id != lost_stage.id
+    attrs[:stage_id]       = lost_stage.id if lost_stage && @item.stage_id != lost_stage.id
+    attrs[:lost_reason_id] = reason_id if reason_id
 
     @item.update!(attrs)
-    log_activity('lost', description: '❌ Lead marcado como Perdido') unless already_lost
+
+    unless already_lost
+      log_activity('lost',
+                   lost_reason_id: reason_id,
+                   lost_reason_name: reason_name,
+                   description: "❌ Lead marcado como Perdido#{reason_name ? " — #{reason_name}" : ''}")
+    end
+
     if lost_stage && prev_stage_id != lost_stage.id
       from_stage = @pipeline.kanban_stages.find_by(id: prev_stage_id)
       log_activity('moved', from_stage: prev_stage_id, to_stage: lost_stage.id,
                             from_stage_name: from_stage&.name, to_stage_name: lost_stage.name,
                             description: "#{from_stage&.name} → #{lost_stage.name}")
     end
+
+    auto_resolve_conversation if @pipeline.settings['auto_resolve_conversation']
   end
 
   def reopen
@@ -165,7 +203,7 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
 
   def item_params
     params.permit(
-      :stage_id, :conversation_id, :contact_phone, :title, :value,
+      :stage_id, :conversation_id, :contact_phone, :contact_id, :title, :value,
       :assignee_id, :position, :source, :temperature, :probability,
       :expected_close_date, :score,
       tags: []
@@ -178,5 +216,12 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
       action_type: action_type,
       metadata: metadata
     )
+  end
+
+  def auto_resolve_conversation
+    return unless @item.conversation_id.present?
+
+    conversation = Current.account.conversations.find_by(id: @item.conversation_id)
+    conversation&.update_columns(status: 'resolved')
   end
 end

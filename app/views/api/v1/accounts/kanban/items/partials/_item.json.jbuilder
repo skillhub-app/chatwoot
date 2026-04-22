@@ -16,6 +16,7 @@ json.tags item.tags
 json.won_at item.won_at&.to_i
 json.lost_at item.lost_at&.to_i
 json.status item.status
+json.contact_id item.contact_id
 
 json.tasks_count item.kanban_tasks.size
 json.pending_tasks_count item.kanban_tasks.pending.size
@@ -29,6 +30,15 @@ if item.assignee
   end
 else
   json.assignee nil
+end
+
+if item.lost_reason
+  json.lost_reason do
+    json.id item.lost_reason.id
+    json.name item.lost_reason.name
+  end
+else
+  json.lost_reason nil
 end
 
 json.created_at item.created_at.to_i

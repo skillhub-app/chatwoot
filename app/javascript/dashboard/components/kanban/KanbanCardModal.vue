@@ -208,19 +208,11 @@ async function saveField(field) {
   });
 }
 
-async function moveToStage(stageId) {
-  form.value.stage_id = stageId;
-  await store.dispatch('kanban/moveItem', {
-    pipelineId: props.pipelineId,
-    id: props.item.id,
-    stageId,
-    position: 0,
-  });
-}
-
 // ─── Won / Lost / Delete ─────────────────────────────────────────────────────
 const statusLoading = ref(false);
 const statusError = ref('');
+const showLostPicker = ref(false);
+const selectedLostReasonId = ref(null);
 
 async function markWon() {
   statusLoading.value = true;
@@ -256,13 +248,21 @@ async function markWon() {
   }
 }
 
-async function markLost() {
+async function openLostPicker() {
+  await store.dispatch('kanban/fetchLostReasons');
+  selectedLostReasonId.value = null;
+  showLostPicker.value = true;
+}
+
+async function confirmMarkLost() {
+  showLostPicker.value = false;
   statusLoading.value = true;
   statusError.value = '';
   try {
     const updated = await store.dispatch('kanban/markItemLost', {
       pipelineId: props.pipelineId,
       id: props.item.id,
+      lostReasonId: selectedLostReasonId.value || undefined,
     });
     store.dispatch('kanban/fetchActivities', {
       pipelineId: props.pipelineId,
@@ -552,6 +552,7 @@ const ACTIVITY_ICONS = {
     cls: 'text-woot-500',
   },
   phone_changed: { icon: 'i-lucide-phone', cls: 'text-slate-500' },
+  contact_linked: { icon: 'i-lucide-user', cls: 'text-blue-500' },
 };
 
 const ACTIVITY_LABELS = {
@@ -571,6 +572,7 @@ const ACTIVITY_LABELS = {
   source_changed: 'Origem alterada',
   conversation_linked: 'Conversa vinculada',
   phone_changed: 'Telefone atualizado',
+  contact_linked: 'Contato vinculado',
 };
 
 function activityIcon(type) {
@@ -709,6 +711,144 @@ const currentAssignee = computed(
     props.item?.assignee ||
     null
 );
+
+// ─── Lost reasons (for picker) ───────────────────────────────────────────────
+const lostReasons = computed(() => store.getters['kanban/getLostReasons']);
+
+// ─── Mover CRM ───────────────────────────────────────────────────────────────
+const pipelines = computed(() => store.getters['kanban/getPipelines']);
+const showMoverCRM = ref(false);
+const moverPipelineId = ref(null);
+const moverStageId = ref(null);
+const moverStages = ref([]);
+const moverLoading = ref(false);
+
+watch(moverPipelineId, async pid => {
+  moverStageId.value = null;
+  moverStages.value = [];
+  if (!pid) return;
+  if (pid === props.pipelineId) {
+    moverStages.value = stages.value;
+  } else {
+    await store.dispatch('kanban/fetchPipelineStages', pid);
+    moverStages.value =
+      store.getters['kanban/getPipelineStagesCache'](pid) || [];
+  }
+});
+
+function openMoverCRM() {
+  moverPipelineId.value = props.pipelineId;
+  moverStageId.value = props.item.stage_id;
+  moverStages.value = stages.value;
+  showMoverCRM.value = true;
+}
+
+async function confirmMoverCRM() {
+  if (!moverStageId.value) return;
+  moverLoading.value = true;
+  try {
+    if (moverPipelineId.value === props.pipelineId) {
+      await store.dispatch('kanban/moveItem', {
+        pipelineId: props.pipelineId,
+        id: props.item.id,
+        stageId: moverStageId.value,
+        position: 0,
+      });
+    } else {
+      await store.dispatch('kanban/transferItem', {
+        pipelineId: props.pipelineId,
+        id: props.item.id,
+        targetPipelineId: moverPipelineId.value,
+        stageId: moverStageId.value,
+      });
+    }
+    showMoverCRM.value = false;
+    store.dispatch('kanban/fetchActivities', {
+      pipelineId: moverPipelineId.value,
+      itemId: props.item.id,
+    });
+    emit('updated');
+  } catch (e) {
+    statusError.value =
+      e?.response?.data?.message || e?.message || 'Erro ao mover card.';
+    showMoverCRM.value = false;
+  } finally {
+    moverLoading.value = false;
+  }
+}
+
+// ─── Contact section ─────────────────────────────────────────────────────────
+const linkedContact = ref(null);
+const showContactSearch = ref(false);
+const contactSearchQuery = ref('');
+const contactSearchResults = ref([]);
+const contactSearchLoading = ref(false);
+
+watch(
+  () => props.item?.contact_id,
+  async cid => {
+    if (!cid) {
+      linkedContact.value = null;
+      return;
+    }
+    try {
+      const { data } = await axios.get(
+        `/api/v1/accounts/${accountId.value}/contacts/${cid}`
+      );
+      linkedContact.value = data;
+    } catch {
+      linkedContact.value = null;
+    }
+  },
+  { immediate: true }
+);
+
+let contactSearchTimeout = null;
+watch(contactSearchQuery, q => {
+  clearTimeout(contactSearchTimeout);
+  if (q.length < 2) {
+    contactSearchResults.value = [];
+    return;
+  }
+  contactSearchLoading.value = true;
+  contactSearchTimeout = setTimeout(async () => {
+    try {
+      const { data } = await axios.get(
+        `/api/v1/accounts/${accountId.value}/contacts/search`,
+        { params: { q, include_contacts: true } }
+      );
+      contactSearchResults.value = data?.payload?.contacts || [];
+    } catch {
+      contactSearchResults.value = [];
+    } finally {
+      contactSearchLoading.value = false;
+    }
+  }, 300);
+});
+
+async function linkContact(contact) {
+  await store.dispatch('kanban/updateItem', {
+    pipelineId: props.pipelineId,
+    id: props.item.id,
+    contact_id: contact.id,
+  });
+  linkedContact.value = contact;
+  showContactSearch.value = false;
+  contactSearchQuery.value = '';
+  store.dispatch('kanban/fetchActivities', {
+    pipelineId: props.pipelineId,
+    itemId: props.item.id,
+  });
+}
+
+async function unlinkContact() {
+  await store.dispatch('kanban/updateItem', {
+    pipelineId: props.pipelineId,
+    id: props.item.id,
+    contact_id: null,
+  });
+  linkedContact.value = null;
+}
 </script>
 
 <template>
@@ -718,7 +858,7 @@ const currentAssignee = computed(
     @click.self="emit('close')"
   >
     <div
-      class="bg-white dark:bg-slate-800 w-full h-full sm:rounded-2xl sm:shadow-2xl sm:w-[84vw] sm:max-w-5xl sm:h-[90vh] flex flex-col overflow-hidden"
+      class="relative bg-white dark:bg-slate-800 w-full h-full sm:rounded-2xl sm:shadow-2xl sm:w-[84vw] sm:max-w-5xl sm:h-[90vh] flex flex-col overflow-hidden"
     >
       <!-- Header -->
       <div
@@ -818,17 +958,20 @@ const currentAssignee = computed(
           <div>
             <label
               class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
-              >Etapa</label
+              >Etapa atual</label
             >
-            <select
-              v-model="form.stage_id"
-              class="w-full text-sm border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
-              @change="moveToStage(form.stage_id)"
+            <p
+              class="text-sm text-slate-700 dark:text-slate-300 font-medium mb-1.5 truncate"
             >
-              <option v-for="s in stages" :key="s.id" :value="s.id">
-                {{ s.name }}
-              </option>
-            </select>
+              {{ currentStage?.name || '—' }}
+            </p>
+            <button
+              class="w-full flex items-center justify-center gap-2 text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-medium transition-colors"
+              @click="openMoverCRM"
+            >
+              <span class="i-lucide-move-right size-3.5" />
+              Mover CRM
+            </button>
           </div>
 
           <!-- Assignee -->
@@ -988,6 +1131,86 @@ const currentAssignee = computed(
             </span>
           </div>
 
+          <!-- Contato CRM -->
+          <div>
+            <label
+              class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
+              >Contato CRM</label
+            >
+            <div v-if="linkedContact" class="flex items-center gap-2 mb-1.5">
+              <img
+                v-if="linkedContact.thumbnail"
+                :src="linkedContact.thumbnail"
+                class="size-6 rounded-full shrink-0"
+              />
+              <span
+                v-else
+                class="size-6 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-[10px] font-bold text-blue-600 shrink-0"
+              >
+                {{ linkedContact.name?.[0]?.toUpperCase() }}
+              </span>
+              <div class="flex-1 min-w-0">
+                <p
+                  class="text-xs text-slate-700 dark:text-slate-300 truncate font-medium"
+                >
+                  {{ linkedContact.name }}
+                </p>
+                <p
+                  v-if="linkedContact.phone_number"
+                  class="text-[10px] text-slate-400 truncate"
+                >
+                  {{ linkedContact.phone_number }}
+                </p>
+              </div>
+              <button
+                class="text-slate-400 hover:text-red-500 shrink-0"
+                title="Desvincular"
+                @click="unlinkContact"
+              >
+                <span class="i-lucide-x size-3.5" />
+              </button>
+            </div>
+            <button
+              class="w-full flex items-center justify-center gap-2 text-xs px-2.5 py-1.5 rounded-lg border border-dashed border-slate-300 dark:border-slate-600 text-slate-500 hover:border-woot-400 hover:text-woot-500 transition-colors"
+              @click="showContactSearch = !showContactSearch"
+            >
+              <span class="i-lucide-user-plus size-3.5" />
+              {{ linkedContact ? 'Trocar contato' : 'Vincular contato' }}
+            </button>
+            <div v-if="showContactSearch" class="mt-2 space-y-1.5">
+              <input
+                v-model="contactSearchQuery"
+                type="text"
+                placeholder="Buscar por nome, telefone..."
+                class="w-full text-xs border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+              />
+              <div v-if="contactSearchLoading" class="py-1.5 text-center">
+                <span
+                  class="i-lucide-loader-2 size-4 animate-spin text-slate-400 mx-auto block"
+                />
+              </div>
+              <div
+                v-else-if="contactSearchResults.length"
+                class="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden"
+              >
+                <button
+                  v-for="c in contactSearchResults.slice(0, 5)"
+                  :key="c.id"
+                  class="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700 text-xs text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700 last:border-b-0"
+                  @click="linkContact(c)"
+                >
+                  <span
+                    class="i-lucide-user size-3.5 text-slate-400 shrink-0"
+                  />
+                  <span class="flex-1 truncate font-medium">{{ c.name }}</span>
+                  <span class="text-[10px] text-slate-400 shrink-0">{{
+                    c.phone_number
+                  }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div class="border-t border-slate-200 dark:border-slate-700 pt-3">
             <p class="text-[10px] text-slate-400">
               Criado: {{ formatTs(item.created_at) }}
@@ -1024,7 +1247,7 @@ const currentAssignee = computed(
               v-if="item.status !== 'lost'"
               :disabled="statusLoading"
               class="w-full flex items-center justify-center gap-2 text-xs px-3 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-medium transition-colors disabled:opacity-50"
-              @click="markLost"
+              @click="openLostPicker"
             >
               <span
                 :class="
@@ -1124,6 +1347,9 @@ const currentAssignee = computed(
                       </p>
                       <p class="text-[10px] text-slate-400 mt-0.5">
                         {{ formatTs(act.created_at) }}
+                        <span v-if="act.author?.name" class="ml-1"
+                          >· {{ act.author.name }}</span
+                        >
                       </p>
                     </div>
                   </div>
@@ -1495,7 +1721,7 @@ const currentAssignee = computed(
                   >
                     <div class="flex items-start gap-2.5">
                       <button
-                        class="shrink-0 mt-0.5 size-4 rounded border-2 border-slate-400 hover:border-green-500 transition-colors"
+                        class="shrink-0 mt-0.5 size-4 rounded border-2 border-slate-400 dark:border-slate-500 bg-white dark:bg-slate-600 hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
                         @click="toggleTask(task)"
                       />
                       <div class="flex-1 min-w-0">
@@ -1870,6 +2096,157 @@ const currentAssignee = computed(
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Mover CRM overlay ─────────────────────────────────────────────── -->
+      <div
+        v-if="showMoverCRM"
+        class="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-2xl"
+        @click.self="showMoverCRM = false"
+      >
+        <div
+          class="bg-white dark:bg-slate-800 rounded-xl shadow-xl p-5 w-80 space-y-4"
+        >
+          <div class="flex items-center justify-between">
+            <h3
+              class="text-sm font-semibold text-slate-800 dark:text-slate-100"
+            >
+              Mover CRM
+            </h3>
+            <button
+              class="text-slate-400 hover:text-slate-600"
+              @click="showMoverCRM = false"
+            >
+              <span class="i-lucide-x size-4" />
+            </button>
+          </div>
+          <div>
+            <label
+              class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
+              >Pipeline</label
+            >
+            <select
+              v-model="moverPipelineId"
+              class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+            >
+              <option v-for="p in pipelines" :key="p.id" :value="p.id">
+                {{ p.name }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label
+              class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
+              >Etapa</label
+            >
+            <select
+              v-model="moverStageId"
+              class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+            >
+              <option :value="null">Selecione uma etapa...</option>
+              <option v-for="s in moverStages" :key="s.id" :value="s.id">
+                {{ s.name }}
+              </option>
+            </select>
+          </div>
+          <div class="flex gap-2 pt-1">
+            <button
+              class="flex-1 px-3 py-2 text-xs rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 font-medium"
+              @click="showMoverCRM = false"
+            >
+              Cancelar
+            </button>
+            <button
+              :disabled="!moverStageId || moverLoading"
+              class="flex-1 px-3 py-2 text-xs rounded-lg bg-woot-500 text-white hover:bg-woot-600 font-medium disabled:opacity-50 flex items-center justify-center gap-1.5"
+              @click="confirmMoverCRM"
+            >
+              <span
+                v-if="moverLoading"
+                class="i-lucide-loader-2 size-3 animate-spin"
+              />
+              Confirmar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Lost reason picker overlay ────────────────────────────────────── -->
+      <div
+        v-if="showLostPicker"
+        class="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-2xl"
+        @click.self="showLostPicker = false"
+      >
+        <div
+          class="bg-white dark:bg-slate-800 rounded-xl shadow-xl p-5 w-80 space-y-4"
+        >
+          <div class="flex items-center justify-between">
+            <h3
+              class="text-sm font-semibold text-slate-800 dark:text-slate-100"
+            >
+              Motivo da Perda
+            </h3>
+            <button
+              class="text-slate-400 hover:text-slate-600"
+              @click="showLostPicker = false"
+            >
+              <span class="i-lucide-x size-4" />
+            </button>
+          </div>
+          <div class="space-y-1 max-h-56 overflow-y-auto">
+            <button
+              class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition-colors"
+              :class="
+                selectedLostReasonId === null
+                  ? 'bg-woot-50 dark:bg-woot-900/30 text-woot-600 dark:text-woot-400 font-medium'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+              "
+              @click="selectedLostReasonId = null"
+            >
+              <span class="i-lucide-minus-circle size-4 text-slate-400" />
+              Sem motivo específico
+            </button>
+            <button
+              v-for="reason in lostReasons"
+              :key="reason.id"
+              class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition-colors"
+              :class="
+                selectedLostReasonId === reason.id
+                  ? 'bg-woot-50 dark:bg-woot-900/30 text-woot-600 dark:text-woot-400 font-medium'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+              "
+              @click="selectedLostReasonId = reason.id"
+            >
+              <span class="i-lucide-x-circle size-4 text-red-400" />
+              {{ reason.name }}
+            </button>
+            <p
+              v-if="lostReasons.length === 0"
+              class="text-xs text-slate-400 text-center py-3"
+            >
+              Nenhum motivo cadastrado. Configure em Configurações do Pipeline.
+            </p>
+          </div>
+          <div class="flex gap-2 pt-1">
+            <button
+              class="flex-1 px-3 py-2 text-xs rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 font-medium"
+              @click="showLostPicker = false"
+            >
+              Cancelar
+            </button>
+            <button
+              :disabled="statusLoading"
+              class="flex-1 px-3 py-2 text-xs rounded-lg bg-red-500 text-white hover:bg-red-600 font-medium disabled:opacity-50 flex items-center justify-center gap-1.5"
+              @click="confirmMarkLost"
+            >
+              <span
+                v-if="statusLoading"
+                class="i-lucide-loader-2 size-3 animate-spin"
+              />
+              Confirmar Perda
+            </button>
           </div>
         </div>
       </div>

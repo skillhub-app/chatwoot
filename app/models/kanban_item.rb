@@ -44,6 +44,8 @@ class KanbanItem < ApplicationRecord
   belongs_to :stage, class_name: 'KanbanStage'
   belongs_to :conversation, optional: true
   belongs_to :assignee, class_name: 'User', optional: true
+  belongs_to :contact, class_name: 'Contact', optional: true
+  belongs_to :lost_reason, class_name: 'KanbanLostReason', optional: true
 
   has_many :kanban_tasks, dependent: :destroy
   has_many :kanban_notes, dependent: :destroy

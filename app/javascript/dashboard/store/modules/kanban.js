@@ -7,6 +7,7 @@ import {
   activitiesAPI,
   attachmentsAPI,
   globalItemsAPI,
+  lostReasonsAPI,
 } from '../../api/kanban';
 
 const state = {
@@ -14,6 +15,8 @@ const state = {
   stages: [],
   items: [],
   conversationItems: [],
+  lostReasons: [],
+  pipelineStagesCache: {},
   // Per-item subresources (keyed by item id)
   tasks: {},
   notes: {},
@@ -48,6 +51,9 @@ const getters = {
   getActivitiesForItem: $s => itemId => $s.activities[itemId] || [],
   getAttachmentsForItem: $s => itemId => $s.attachments[itemId] || [],
   getConversationItems: $s => $s.conversationItems,
+  getLostReasons: $s => $s.lostReasons,
+  getPipelineStagesCache: $s => pipelineId =>
+    $s.pipelineStagesCache[pipelineId] || [],
 };
 
 const mutations = {
@@ -162,6 +168,25 @@ const mutations = {
   UPDATE_CONVERSATION_ITEM($s, v) {
     const i = $s.conversationItems.findIndex(x => x.id === v.id);
     if (i !== -1) $s.conversationItems.splice(i, 1, v);
+  },
+  SET_LOST_REASONS($s, v) {
+    $s.lostReasons = v;
+  },
+  ADD_LOST_REASON($s, v) {
+    $s.lostReasons.push(v);
+  },
+  UPDATE_LOST_REASON($s, v) {
+    const i = $s.lostReasons.findIndex(r => r.id === v.id);
+    if (i !== -1) $s.lostReasons.splice(i, 1, v);
+  },
+  DELETE_LOST_REASON($s, id) {
+    $s.lostReasons = $s.lostReasons.filter(r => r.id !== id);
+  },
+  SET_PIPELINE_STAGES_CACHE($s, { pipelineId, stages }) {
+    $s.pipelineStagesCache = {
+      ...$s.pipelineStagesCache,
+      [pipelineId]: stages,
+    };
   },
 };
 
@@ -312,10 +337,23 @@ const actions = {
     commit('UPDATE_ITEM', data.payload);
     return data.payload;
   },
-  markItemLost: async ({ commit }, { pipelineId, id }) => {
-    const { data } = await itemsAPI.lost(pipelineId, id);
-    // Backend moves item to is_lost stage and sets lost_at — single source of truth
+  markItemLost: async ({ commit }, { pipelineId, id, lostReasonId }) => {
+    const payload = lostReasonId ? { lost_reason_id: lostReasonId } : {};
+    const { data } = await itemsAPI.lost(pipelineId, id, payload);
     commit('UPDATE_ITEM', data.payload);
+    return data.payload;
+  },
+  transferItem: async (
+    { commit },
+    { pipelineId, id, targetPipelineId, stageId }
+  ) => {
+    const { data } = await itemsAPI.transfer(
+      pipelineId,
+      id,
+      targetPipelineId,
+      stageId
+    );
+    commit('DELETE_ITEM', id);
     return data.payload;
   },
   reopenItem: async ({ commit }, { pipelineId, id }) => {
@@ -456,6 +494,42 @@ const actions = {
     try {
       await attachmentsAPI.delete(pipelineId, itemId, id);
       commit('DELETE_ITEM_ATTACHMENT', { itemId, attachmentId: id });
+    } catch {
+      /* ignore */
+    }
+  },
+
+  // Lost reasons
+  fetchLostReasons: async ({ commit }) => {
+    try {
+      const { data } = await lostReasonsAPI.list();
+      commit('SET_LOST_REASONS', data.payload);
+    } catch {
+      /* ignore */
+    }
+  },
+  createLostReason: async ({ commit }, d) => {
+    const { data } = await lostReasonsAPI.create(d);
+    commit('ADD_LOST_REASON', data.payload);
+    return data.payload;
+  },
+  updateLostReason: async ({ commit }, { id, ...d }) => {
+    const { data } = await lostReasonsAPI.update(id, d);
+    commit('UPDATE_LOST_REASON', data.payload);
+  },
+  deleteLostReason: async ({ commit }, id) => {
+    await lostReasonsAPI.delete(id);
+    commit('DELETE_LOST_REASON', id);
+  },
+
+  // Pipeline stages cache (for cross-pipeline move)
+  fetchPipelineStages: async ({ commit }, pipelineId) => {
+    try {
+      const { data } = await stagesAPI.list(pipelineId);
+      commit('SET_PIPELINE_STAGES_CACHE', {
+        pipelineId,
+        stages: data.payload,
+      });
     } catch {
       /* ignore */
     }

@@ -117,6 +117,7 @@ Rails.application.routes.draw do
             resources :goals, only: [:index] do
               collection { post :upsert }
             end
+            resources :lost_reasons, only: [:index, :create, :update, :destroy]
             resources :pipelines, only: [:index, :show, :create, :update, :destroy] do
               resources :stages, only: [:index, :show, :create, :update, :destroy] do
                 patch :reorder, on: :member
@@ -127,6 +128,7 @@ Rails.application.routes.draw do
                   patch :won
                   patch :lost
                   patch :reopen
+                  patch :transfer
                 end
                 resources :tasks, only: [:index, :create, :update, :destroy] do
                   patch :complete, on: :member

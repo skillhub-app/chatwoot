@@ -8,5 +8,6 @@ json.is_active pipeline.is_active
 json.visibility_type pipeline.visibility_type
 json.visible_to_user_ids pipeline.visible_to_user_ids
 json.stages_count pipeline.kanban_stages.size
+json.settings pipeline.settings
 json.created_at pipeline.created_at.to_i
 json.updated_at pipeline.updated_at.to_i
