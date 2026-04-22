@@ -165,16 +165,28 @@ class KanbanGamificationAPI extends ApiClient {
     super('kanban/gamification', { accountScoped: true });
   }
 
-  rankings() {
-    return axios.get(`${this.url}/rankings`);
+  rankings(params = {}) {
+    return axios.get(`${this.url}/rankings`, { params });
   }
 
-  overview() {
-    return axios.get(`${this.url}/overview`);
+  overview(params = {}) {
+    return axios.get(`${this.url}/overview`, { params });
   }
 
-  recentWins() {
-    return axios.get(`${this.url}/recent_wins`);
+  recentWins(params = {}) {
+    return axios.get(`${this.url}/recent_wins`, { params });
+  }
+
+  timeline(params = {}) {
+    return axios.get(`${this.url}/timeline`, { params });
+  }
+
+  globalGoals() {
+    return axios.get(`${this.url}/global_goals`);
+  }
+
+  updateGlobalGoals(data) {
+    return axios.patch(`${this.url}/global_goals`, data);
   }
 }
 

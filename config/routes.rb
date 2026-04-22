@@ -113,6 +113,9 @@ Rails.application.routes.draw do
               get :rankings
               get :overview
               get :recent_wins
+              get :timeline
+              get :global_goals
+              patch :global_goals, action: :update_global_goals
             end
             resources :goals, only: [:index] do
               collection { post :upsert }
