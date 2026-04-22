@@ -34,11 +34,32 @@ const FORM_CONFIG = {
   LAST_NAME: { field: 'lastName' },
   EMAIL_ADDRESS: { field: 'email' },
   PHONE_NUMBER: { field: 'phoneNumber' },
-  CITY: { field: 'additionalAttributes.city' },
   COUNTRY: { field: 'additionalAttributes.countryCode' },
   BIO: { field: 'additionalAttributes.description' },
   COMPANY_NAME: { field: 'additionalAttributes.companyName' },
 };
+
+const PERSONAL_CONFIG = {
+  CPF: { field: 'additionalAttributes.cpf' },
+  BIRTHDATE: { field: 'additionalAttributes.birthdate', type: 'date' },
+  GENDER: { field: 'additionalAttributes.gender', type: 'select' },
+};
+
+const ADDRESS_CONFIG = {
+  ZIP_CODE: { field: 'additionalAttributes.zipCode' },
+  STREET: { field: 'additionalAttributes.street' },
+  STREET_NUMBER: { field: 'additionalAttributes.streetNumber' },
+  ADDRESS_COMPLEMENT: { field: 'additionalAttributes.addressComplement' },
+  NEIGHBORHOOD: { field: 'additionalAttributes.neighborhood' },
+  CITY: { field: 'additionalAttributes.city' },
+  STATE: { field: 'additionalAttributes.state' },
+};
+
+const GENDER_OPTIONS = [
+  { value: 'male', label: 'Masculino' },
+  { value: 'female', label: 'Feminino' },
+  { value: 'other', label: 'Outro' },
+];
 
 const SOCIAL_CONFIG = {
   LINKEDIN: 'i-ri-linkedin-box-fill',
@@ -63,6 +84,15 @@ const defaultState = {
     countryCode: '',
     country: '',
     city: '',
+    cpf: '',
+    birthdate: '',
+    gender: '',
+    zipCode: '',
+    street: '',
+    streetNumber: '',
+    addressComplement: '',
+    neighborhood: '',
+    state: '',
     socialProfiles: {
       facebook: '',
       github: '',
@@ -105,6 +135,15 @@ const prepareStateBasedOnProps = () => {
     countryCode = '',
     country = '',
     city = '',
+    cpf = '',
+    birthdate = '',
+    gender = '',
+    zipCode = '',
+    street = '',
+    streetNumber = '',
+    addressComplement = '',
+    neighborhood = '',
+    state: stateField = '',
     socialTelegramUserName = '',
     socialProfiles = {},
   } = additionalAttributes || {};
@@ -125,6 +164,15 @@ const prepareStateBasedOnProps = () => {
       countryCode,
       country,
       city,
+      cpf,
+      birthdate,
+      gender,
+      zipCode,
+      street,
+      streetNumber,
+      addressComplement,
+      neighborhood,
+      state: stateField,
       socialProfiles: {
         ...socialProfiles,
         telegram: telegramUsername,
@@ -139,6 +187,25 @@ const countryOptions = computed(() =>
 
 const editDetailsForm = computed(() =>
   Object.keys(FORM_CONFIG).map(key => ({
+    key,
+    placeholder: t(
+      `CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.FORM.${key}.PLACEHOLDER`
+    ),
+  }))
+);
+
+const personalDataForm = computed(() =>
+  Object.keys(PERSONAL_CONFIG).map(key => ({
+    key,
+    placeholder: t(
+      `CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.FORM.${key}.PLACEHOLDER`
+    ),
+    type: PERSONAL_CONFIG[key].type,
+  }))
+);
+
+const addressForm = computed(() =>
+  Object.keys(ADDRESS_CONFIG).map(key => ({
     key,
     placeholder: t(
       `CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.FORM.${key}.PLACEHOLDER`
@@ -165,7 +232,10 @@ const getValidationKey = key => {
 
 // Creates a computed property for two-way form field binding
 const getFormBinding = key => {
-  const field = FORM_CONFIG[key]?.field;
+  const field =
+    FORM_CONFIG[key]?.field ||
+    PERSONAL_CONFIG[key]?.field ||
+    ADDRESS_CONFIG[key]?.field;
   if (!field) return null;
 
   return computed({
@@ -296,6 +366,71 @@ defineExpose({
         </template>
       </div>
     </div>
+    <!-- Dados Pessoais Extras -->
+    <div class="flex flex-col items-start gap-2">
+      <span class="py-1 text-sm font-medium text-n-slate-12">
+        {{ t('CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.PERSONAL_DATA_TITLE') }}
+      </span>
+      <div class="grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
+        <template v-for="item in personalDataForm" :key="item.key">
+          <select
+            v-if="item.type === 'select'"
+            v-model="state.additionalAttributes.gender"
+            class="h-8 w-full rounded-lg border border-n-weak bg-n-alpha-2 px-2.5 text-sm text-n-slate-12 outline-none focus:border-woot-500 dark:bg-n-solid-3"
+            @change="emit('update', state)"
+          >
+            <option value="">{{ item.placeholder }}</option>
+            <option
+              v-for="opt in GENDER_OPTIONS"
+              :key="opt.value"
+              :value="opt.value"
+            >
+              {{ opt.label }}
+            </option>
+          </select>
+          <input
+            v-else-if="item.type === 'date'"
+            v-model="state.additionalAttributes.birthdate"
+            type="date"
+            class="h-8 w-full rounded-lg border border-n-weak bg-n-alpha-2 px-2.5 text-sm text-n-slate-12 outline-none focus:border-woot-500 dark:bg-n-solid-3"
+            @change="emit('update', state)"
+          />
+          <Input
+            v-else
+            v-model="getFormBinding(item.key).value"
+            :placeholder="item.placeholder"
+            :custom-input-class="`h-8 !pt-1 !pb-1 ${
+              !isDetailsView
+                ? '[&:not(.error,.focus)]:!outline-transparent'
+                : ''
+            }`"
+            class="w-full"
+            @input="emit('update', state)"
+          />
+        </template>
+      </div>
+    </div>
+
+    <!-- Endereço -->
+    <div class="flex flex-col items-start gap-2">
+      <span class="py-1 text-sm font-medium text-n-slate-12">{{
+        t('CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.ADDRESS_TITLE')
+      }}</span>
+      <div class="grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
+        <Input
+          v-for="item in addressForm"
+          :key="item.key"
+          v-model="getFormBinding(item.key).value"
+          :placeholder="item.placeholder"
+          :custom-input-class="`h-8 !pt-1 !pb-1 ${
+            !isDetailsView ? '[&:not(.error,.focus)]:!outline-transparent' : ''
+          }`"
+          class="w-full"
+          @input="emit('update', state)"
+        />
+      </div>
+    </div>
+
     <div class="flex flex-col items-start gap-2">
       <span class="py-1 text-sm font-medium text-n-slate-12">
         {{ t('CONTACTS_LAYOUT.CARD.SOCIAL_MEDIA.TITLE') }}

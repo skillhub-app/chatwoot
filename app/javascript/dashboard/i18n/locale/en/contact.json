@@ -441,8 +441,37 @@
           },
           "COMPANY_NAME": {
             "PLACEHOLDER": "Enter the company name"
+          },
+          "CPF": {
+            "PLACEHOLDER": "CPF"
+          },
+          "BIRTHDATE": {
+            "PLACEHOLDER": "Data de nascimento"
+          },
+          "GENDER": {
+            "PLACEHOLDER": "Sexo"
+          },
+          "ZIP_CODE": {
+            "PLACEHOLDER": "CEP"
+          },
+          "STREET": {
+            "PLACEHOLDER": "Logradouro"
+          },
+          "STREET_NUMBER": {
+            "PLACEHOLDER": "Número"
+          },
+          "ADDRESS_COMPLEMENT": {
+            "PLACEHOLDER": "Complemento"
+          },
+          "NEIGHBORHOOD": {
+            "PLACEHOLDER": "Bairro"
+          },
+          "STATE": {
+            "PLACEHOLDER": "Estado"
           }
         },
+        "PERSONAL_DATA_TITLE": "Personal Data",
+        "ADDRESS_TITLE": "Address",
         "UPDATE_BUTTON": "Update contact",
         "SUCCESS_MESSAGE": "Contact updated successfully",
         "ERROR_MESSAGE": "Unable to update contact. Please try again later."
