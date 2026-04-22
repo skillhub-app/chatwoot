@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch, nextTick } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useStore } from 'vuex';
 import draggable from 'vuedraggable';
 import KanbanCard from './KanbanCard.vue';
@@ -17,6 +17,11 @@ const storeItems = computed(() =>
   store.getters['kanban/getItemsByStage'](props.stage.id)
 );
 const items = ref([]);
+
+// isDragging guards the SOURCE column's watch during an active drag so that
+// websocket / background updates don't disrupt the card while it's in flight.
+// It must NOT be set on the destination column — vuedraggable fires @end on
+// both source and destination, which would race and prematurely unlock the guard.
 const isDragging = ref(false);
 
 watch(
@@ -26,7 +31,7 @@ watch(
       items.value = val.map(i => ({ ...i }));
     }
   },
-  { immediate: true, deep: true }
+  { immediate: true }
 );
 
 const totalValue = computed(() => {
@@ -58,24 +63,29 @@ const stageLabel = computed(() => {
 });
 
 // ── Drag event handlers ───────────────────────────────────────────────
+// @start fires only on the SOURCE column — lock it so background updates
+// don't reorder cards while the user is dragging.
 function onDragStart() {
   isDragging.value = true;
 }
 
+// @end fires on source (and sometimes destination in SortableJS).
+// On the source this correctly unlocks. On the destination isDragging is
+// already false so this is a no-op.
 function onDragEnd() {
-  nextTick(() => {
-    isDragging.value = false;
-  });
+  isDragging.value = false;
 }
 
+// @change fires on the destination column with event.added when a card is
+// dropped here from another column.
+// DO NOT set isDragging = true here: the store optimistic update runs
+// synchronously inside moveItem, so storeItems already reflects the new
+// position by the time the watcher fires (next microtask). The watcher
+// running freely is correct and desired.
 function onChange(event) {
   if (!event.added) return;
-
-  // Guard destination column's watch from firing during optimistic update
-  isDragging.value = true;
   const { element, newIndex } = event.added;
 
-  // Move the item — backend auto_update_won_lost handles won_at/lost_at when dragging to won/lost stage
   store
     .dispatch('kanban/moveItem', {
       pipelineId: props.pipelineId,
@@ -83,11 +93,9 @@ function onChange(event) {
       stageId: props.stage.id,
       position: newIndex,
     })
-    .then(() => {
-      nextTick(() => {
-        isDragging.value = false;
-        items.value = storeItems.value.map(i => ({ ...i }));
-      });
+    .catch(() => {
+      // moveItem rolled back the optimistic update in the store;
+      // watcher will sync items.value automatically.
     });
 }
 </script>

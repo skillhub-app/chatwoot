@@ -285,32 +285,38 @@ const actions = {
       commit('SET_UI_FLAG', { isUpdating: false });
     }
   },
-  moveItem: async ({ commit }, { pipelineId, id, stageId, position }) => {
+  moveItem: async (
+    { commit, state: $s },
+    { pipelineId, id, stageId, position }
+  ) => {
+    const original = $s.items.find(x => x.id === id);
+    const originalStageId = original?.stage_id;
     commit('MOVE_ITEM_OPTIMISTIC', { itemId: id, stageId });
     try {
       const { data } = await itemsAPI.move(pipelineId, id, stageId, position);
       commit('UPDATE_ITEM', data.payload);
-    } catch {
-      /* optimistic already applied */
+    } catch (e) {
+      // Roll back the optimistic update so the board reflects reality
+      if (originalStageId != null) {
+        commit('MOVE_ITEM_OPTIMISTIC', {
+          itemId: id,
+          stageId: originalStageId,
+        });
+      }
+      throw e;
     }
   },
   markItemWon: async ({ commit }, { pipelineId, id }) => {
-    try {
-      const { data } = await itemsAPI.won(pipelineId, id);
-      // Backend moves the item to the is_won stage and sets won_at — single source of truth
-      commit('UPDATE_ITEM', data.payload);
-    } catch {
-      /* ignore */
-    }
+    const { data } = await itemsAPI.won(pipelineId, id);
+    // Backend moves item to is_won stage and sets won_at — single source of truth
+    commit('UPDATE_ITEM', data.payload);
+    return data.payload;
   },
   markItemLost: async ({ commit }, { pipelineId, id }) => {
-    try {
-      const { data } = await itemsAPI.lost(pipelineId, id);
-      // Backend moves the item to the is_lost stage and sets lost_at — single source of truth
-      commit('UPDATE_ITEM', data.payload);
-    } catch {
-      /* ignore */
-    }
+    const { data } = await itemsAPI.lost(pipelineId, id);
+    // Backend moves item to is_lost stage and sets lost_at — single source of truth
+    commit('UPDATE_ITEM', data.payload);
+    return data.payload;
   },
   reopenItem: async ({ commit }, { pipelineId, id }) => {
     try {

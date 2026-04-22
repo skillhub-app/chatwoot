@@ -207,20 +207,75 @@ async function moveToStage(stageId) {
 }
 
 // ─── Won / Lost / Delete ─────────────────────────────────────────────────────
+const statusLoading = ref(false);
+const statusError = ref('');
+
 async function markWon() {
-  await store.dispatch('kanban/markItemWon', {
-    pipelineId: props.pipelineId,
-    id: props.item.id,
-  });
-  emit('updated');
+  statusLoading.value = true;
+  statusError.value = '';
+  try {
+    const updated = await store.dispatch('kanban/markItemWon', {
+      pipelineId: props.pipelineId,
+      id: props.item.id,
+    });
+    // Reload activities to show the "won" and "moved" entries
+    store.dispatch('kanban/fetchActivities', {
+      pipelineId: props.pipelineId,
+      itemId: props.item.id,
+    });
+    // If the backend moved the card to a won stage the board updates via the
+    // store. If no won stage is configured, warn the user instead of silently
+    // doing nothing.
+    const allStages = store.getters['kanban/getStages'];
+    const wonStage = allStages.find(s => s.is_won);
+    if (!wonStage) {
+      statusError.value =
+        'Nenhuma etapa de Ganho configurada neste pipeline. Configure em Configurações > Etapas.';
+    } else if (updated.stage_id !== wonStage.id) {
+      statusError.value = 'Não foi possível mover para a etapa de Ganho.';
+    } else {
+      emit('updated');
+    }
+  } catch (e) {
+    statusError.value =
+      e?.response?.data?.message || e?.message || 'Erro ao marcar como Ganho.';
+  } finally {
+    statusLoading.value = false;
+  }
 }
+
 async function markLost() {
-  await store.dispatch('kanban/markItemLost', {
-    pipelineId: props.pipelineId,
-    id: props.item.id,
-  });
-  emit('updated');
+  statusLoading.value = true;
+  statusError.value = '';
+  try {
+    const updated = await store.dispatch('kanban/markItemLost', {
+      pipelineId: props.pipelineId,
+      id: props.item.id,
+    });
+    store.dispatch('kanban/fetchActivities', {
+      pipelineId: props.pipelineId,
+      itemId: props.item.id,
+    });
+    const allStages = store.getters['kanban/getStages'];
+    const lostStage = allStages.find(s => s.is_lost);
+    if (!lostStage) {
+      statusError.value =
+        'Nenhuma etapa de Perdido configurada neste pipeline. Configure em Configurações > Etapas.';
+    } else if (updated.stage_id !== lostStage.id) {
+      statusError.value = 'Não foi possível mover para a etapa de Perdido.';
+    } else {
+      emit('updated');
+    }
+  } catch (e) {
+    statusError.value =
+      e?.response?.data?.message ||
+      e?.message ||
+      'Erro ao marcar como Perdido.';
+  } finally {
+    statusLoading.value = false;
+  }
 }
+
 async function reopenItem() {
   await store.dispatch('kanban/reopenItem', {
     pipelineId: props.pipelineId,
@@ -898,19 +953,43 @@ const currentAssignee = computed(
           </div>
 
           <div class="flex flex-col gap-1.5 pt-1">
+            <p
+              v-if="statusError"
+              class="text-[10px] text-red-600 bg-red-50 rounded-lg px-2 py-1.5 leading-snug"
+            >
+              {{ statusError }}
+            </p>
             <button
               v-if="item.status !== 'won'"
-              class="w-full flex items-center justify-center gap-2 text-xs px-3 py-2 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 font-medium transition-colors"
+              :disabled="statusLoading"
+              class="w-full flex items-center justify-center gap-2 text-xs px-3 py-2 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 font-medium transition-colors disabled:opacity-50"
               @click="markWon"
             >
-              <span class="i-lucide-trophy size-3.5" /> Marcar como Ganho
+              <span
+                :class="
+                  statusLoading
+                    ? 'i-lucide-loader-circle animate-spin'
+                    : 'i-lucide-trophy'
+                "
+                class="size-3.5"
+              />
+              Marcar como Ganho
             </button>
             <button
               v-if="item.status !== 'lost'"
-              class="w-full flex items-center justify-center gap-2 text-xs px-3 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-medium transition-colors"
+              :disabled="statusLoading"
+              class="w-full flex items-center justify-center gap-2 text-xs px-3 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-medium transition-colors disabled:opacity-50"
               @click="markLost"
             >
-              <span class="i-lucide-x-circle size-3.5" /> Marcar como Perdido
+              <span
+                :class="
+                  statusLoading
+                    ? 'i-lucide-loader-circle animate-spin'
+                    : 'i-lucide-x-circle'
+                "
+                class="size-3.5"
+              />
+              Marcar como Perdido
             </button>
             <button
               v-if="item.status !== 'open'"
