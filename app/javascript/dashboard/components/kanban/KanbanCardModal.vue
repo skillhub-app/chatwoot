@@ -82,6 +82,18 @@ const PRIORITIES = [
   },
 ];
 
+const RECURRENCE_FREQUENCIES = [
+  { value: 'daily', label: 'Diária' },
+  { value: 'weekly', label: 'Semanal' },
+  { value: 'monthly', label: 'Mensal' },
+];
+
+const RECURRENCE_LABELS = {
+  daily: 'Diária',
+  weekly: 'Semanal',
+  monthly: 'Mensal',
+};
+
 // ─── Store ───────────────────────────────────────────────────────────────────
 const stages = computed(() => store.getters['kanban/getStages']);
 const tasks = computed(() =>
@@ -294,13 +306,19 @@ async function deleteItem() {
 
 // ─── Tasks ───────────────────────────────────────────────────────────────────
 const showNewTaskForm = ref(false);
-const newTask = ref({
+const BLANK_TASK = () => ({
   title: '',
   description: '',
   priority: 1,
   assignee_id: null,
+  start_date: '',
   due_at: '',
+  is_recurring: false,
+  recurrence_frequency: 'weekly',
+  recurrence_interval: 1,
+  recurrence_end_date: '',
 });
+const newTask = ref(BLANK_TASK());
 const savingTask = ref(false);
 const taskError = ref('');
 const editingTaskId = ref(null);
@@ -318,15 +336,21 @@ async function createTask() {
       description: newTask.value.description || undefined,
       priority: newTask.value.priority,
       assignee_id: newTask.value.assignee_id || undefined,
+      start_date: newTask.value.start_date || undefined,
       due_at: newTask.value.due_at || undefined,
+      is_recurring: newTask.value.is_recurring,
+      recurrence_frequency: newTask.value.is_recurring
+        ? newTask.value.recurrence_frequency
+        : undefined,
+      recurrence_interval: newTask.value.is_recurring
+        ? newTask.value.recurrence_interval
+        : undefined,
+      recurrence_end_date:
+        newTask.value.is_recurring && newTask.value.recurrence_end_date
+          ? newTask.value.recurrence_end_date
+          : undefined,
     });
-    newTask.value = {
-      title: '',
-      description: '',
-      priority: 1,
-      assignee_id: null,
-      due_at: '',
-    };
+    newTask.value = BLANK_TASK();
     showNewTaskForm.value = false;
     store.dispatch('kanban/fetchActivities', {
       pipelineId: props.pipelineId,
@@ -367,9 +391,14 @@ function startEditTask(task) {
     description: task.description || '',
     priority: task.priority,
     assignee_id: task.assignee?.id || null,
+    start_date: task.start_date || '',
     due_at: task.due_at
       ? new Date(task.due_at * 1000).toISOString().slice(0, 16)
       : '',
+    is_recurring: task.is_recurring || false,
+    recurrence_frequency: task.recurrence_frequency || 'weekly',
+    recurrence_interval: task.recurrence_interval || 1,
+    recurrence_end_date: task.recurrence_end_date || '',
   };
 }
 
@@ -379,8 +408,19 @@ async function saveEditTask(task) {
     itemId: props.item.id,
     id: task.id,
     ...taskEditForm.value,
+    start_date: taskEditForm.value.start_date || null,
     due_at: taskEditForm.value.due_at || null,
     assignee_id: taskEditForm.value.assignee_id || null,
+    recurrence_frequency: taskEditForm.value.is_recurring
+      ? taskEditForm.value.recurrence_frequency
+      : null,
+    recurrence_interval: taskEditForm.value.is_recurring
+      ? taskEditForm.value.recurrence_interval
+      : null,
+    recurrence_end_date:
+      taskEditForm.value.is_recurring && taskEditForm.value.recurrence_end_date
+        ? taskEditForm.value.recurrence_end_date
+        : null,
   });
   editingTaskId.value = null;
 }
@@ -432,6 +472,11 @@ function formatDue(task) {
   if (task.due_date)
     return new Date(task.due_date + 'T00:00:00').toLocaleDateString('pt-BR');
   return null;
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return null;
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('pt-BR');
 }
 
 // ─── Notes ───────────────────────────────────────────────────────────────────
@@ -1171,16 +1216,92 @@ const currentAssignee = computed(
                     </select>
                   </div>
                 </div>
-                <div>
-                  <label
-                    class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
-                    >Data limite</label
-                  >
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label
+                      class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
+                      >Data início</label
+                    >
+                    <input
+                      v-model="newTask.start_date"
+                      type="date"
+                      class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
+                      >Data limite</label
+                    >
+                    <input
+                      v-model="newTask.due_at"
+                      type="datetime-local"
+                      class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                    />
+                  </div>
+                </div>
+                <!-- Recurrence toggle -->
+                <label
+                  class="flex items-center gap-2 cursor-pointer select-none"
+                >
                   <input
-                    v-model="newTask.due_at"
-                    type="datetime-local"
-                    class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                    v-model="newTask.is_recurring"
+                    type="checkbox"
+                    class="size-3.5 rounded border-slate-300 text-woot-500 focus:ring-woot-400"
                   />
+                  <span
+                    class="text-xs text-slate-600 dark:text-slate-300 font-medium"
+                    >Tarefa recorrente</span
+                  >
+                </label>
+                <!-- Recurrence section -->
+                <div
+                  v-if="newTask.is_recurring"
+                  class="border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 space-y-2"
+                >
+                  <div class="grid grid-cols-2 gap-2">
+                    <div>
+                      <label
+                        class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
+                        >Frequência</label
+                      >
+                      <select
+                        v-model="newTask.recurrence_frequency"
+                        class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none"
+                      >
+                        <option
+                          v-for="f in RECURRENCE_FREQUENCIES"
+                          :key="f.value"
+                          :value="f.value"
+                        >
+                          {{ f.label }}
+                        </option>
+                      </select>
+                    </div>
+                    <div>
+                      <label
+                        class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
+                        >Intervalo</label
+                      >
+                      <input
+                        v-model.number="newTask.recurrence_interval"
+                        type="number"
+                        min="1"
+                        class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label
+                      class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
+                      >Até quando</label
+                    >
+                    <input
+                      v-model="newTask.recurrence_end_date"
+                      type="date"
+                      class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none"
+                    />
+                  </div>
                 </div>
                 <p
                   v-if="taskError"
@@ -1259,11 +1380,92 @@ const currentAssignee = computed(
                         </option>
                       </select>
                     </div>
-                    <input
-                      v-model="taskEditForm.due_at"
-                      type="datetime-local"
-                      class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none"
-                    />
+                    <div class="grid grid-cols-2 gap-2">
+                      <div>
+                        <label
+                          class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
+                          >Data início</label
+                        >
+                        <input
+                          v-model="taskEditForm.start_date"
+                          type="date"
+                          class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label
+                          class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
+                          >Data limite</label
+                        >
+                        <input
+                          v-model="taskEditForm.due_at"
+                          type="datetime-local"
+                          class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    <!-- Recurrence toggle -->
+                    <label
+                      class="flex items-center gap-2 cursor-pointer select-none"
+                    >
+                      <input
+                        v-model="taskEditForm.is_recurring"
+                        type="checkbox"
+                        class="size-3.5 rounded border-slate-300 text-woot-500 focus:ring-woot-400"
+                      />
+                      <span
+                        class="text-xs text-slate-600 dark:text-slate-300 font-medium"
+                        >Tarefa recorrente</span
+                      >
+                    </label>
+                    <div
+                      v-if="taskEditForm.is_recurring"
+                      class="border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 space-y-2"
+                    >
+                      <div class="grid grid-cols-2 gap-2">
+                        <div>
+                          <label
+                            class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
+                            >Frequência</label
+                          >
+                          <select
+                            v-model="taskEditForm.recurrence_frequency"
+                            class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none"
+                          >
+                            <option
+                              v-for="f in RECURRENCE_FREQUENCIES"
+                              :key="f.value"
+                              :value="f.value"
+                            >
+                              {{ f.label }}
+                            </option>
+                          </select>
+                        </div>
+                        <div>
+                          <label
+                            class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
+                            >Intervalo</label
+                          >
+                          <input
+                            v-model.number="taskEditForm.recurrence_interval"
+                            type="number"
+                            min="1"
+                            class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label
+                          class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1"
+                          >Até quando</label
+                        >
+                        <input
+                          v-model="taskEditForm.recurrence_end_date"
+                          type="date"
+                          class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 focus:outline-none"
+                        />
+                      </div>
+                    </div>
                     <div class="flex gap-2">
                       <button
                         class="text-xs px-2 py-1 rounded border border-slate-300 text-slate-600"
@@ -1327,11 +1529,28 @@ const currentAssignee = computed(
                             {{ task.assignee.name }}
                           </span>
                           <span
+                            v-if="task.start_date"
+                            class="text-[10px] text-slate-400 flex items-center gap-0.5"
+                          >
+                            <span class="i-lucide-play size-3" />
+                            {{ formatDate(task.start_date) }}
+                          </span>
+                          <span
                             v-if="formatDue(task)"
                             class="text-[10px] text-slate-400 flex items-center gap-0.5"
                           >
                             <span class="i-lucide-calendar size-3" />
                             {{ formatDue(task) }}
+                          </span>
+                          <span
+                            v-if="task.is_recurring"
+                            class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
+                          >
+                            ↻
+                            {{
+                              RECURRENCE_LABELS[task.recurrence_frequency] ||
+                              'Recorrente'
+                            }}
                           </span>
                           <span
                             v-if="taskStatusInfo(task)"

@@ -22,12 +22,14 @@
 #
 class KanbanTask < ApplicationRecord
   PRIORITIES = { low: 0, medium: 1, high: 2 }.freeze
+  RECURRENCE_FREQUENCIES = %w[daily weekly monthly].freeze
 
   belongs_to :kanban_item
   belongs_to :assignee, class_name: 'User', optional: true
 
   validates :title, presence: true, length: { maximum: 255 }
   validates :priority, inclusion: { in: PRIORITIES.values }
+  validates :recurrence_frequency, inclusion: { in: RECURRENCE_FREQUENCIES }, allow_nil: true
 
   scope :pending, -> { where(completed_at: nil) }
   scope :completed, -> { where.not(completed_at: nil) }

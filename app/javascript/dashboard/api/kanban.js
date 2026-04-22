@@ -94,28 +94,30 @@ class KanbanItemSubresourceAPI extends ApiClient {
     this.subresource = subresource;
   }
 
-  baseUrl(pipelineId, itemId) {
+  // Named differently from ApiClient#baseUrl to avoid infinite recursion
+  // (ApiClient.url getter calls this.baseUrl(), so overriding it loops forever)
+  itemUrl(pipelineId, itemId) {
     return `${this.url}/${pipelineId}/items/${itemId}/${this.subresource}`;
   }
 
   list(pipelineId, itemId) {
-    return axios.get(this.baseUrl(pipelineId, itemId));
+    return axios.get(this.itemUrl(pipelineId, itemId));
   }
 
   create(pipelineId, itemId, data) {
-    return axios.post(this.baseUrl(pipelineId, itemId), data);
+    return axios.post(this.itemUrl(pipelineId, itemId), data);
   }
 
   update(pipelineId, itemId, id, data) {
-    return axios.patch(`${this.baseUrl(pipelineId, itemId)}/${id}`, data);
+    return axios.patch(`${this.itemUrl(pipelineId, itemId)}/${id}`, data);
   }
 
   delete(pipelineId, itemId, id) {
-    return axios.delete(`${this.baseUrl(pipelineId, itemId)}/${id}`);
+    return axios.delete(`${this.itemUrl(pipelineId, itemId)}/${id}`);
   }
 
   complete(pipelineId, itemId, id) {
-    return axios.patch(`${this.baseUrl(pipelineId, itemId)}/${id}/complete`);
+    return axios.patch(`${this.itemUrl(pipelineId, itemId)}/${id}/complete`);
   }
 }
 

@@ -38,8 +38,12 @@ class Api::V1::Accounts::Kanban::TasksController < Api::V1::Accounts::BaseContro
   end
 
   def task_params
-    p = params.permit(:title, :description, :assignee_id, :due_date, :due_at, :priority, :completed_at)
+    p = params.permit(
+      :title, :description, :assignee_id, :due_date, :due_at, :priority, :completed_at,
+      :start_date, :is_recurring, :recurrence_frequency, :recurrence_interval, :recurrence_end_date
+    )
     p[:priority] = p[:priority].to_i if p[:priority].present?
+    p[:recurrence_interval] = p[:recurrence_interval].to_i if p[:recurrence_interval].present?
     p
   end
 
