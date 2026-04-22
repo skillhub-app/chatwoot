@@ -1,12 +1,12 @@
 <script setup>
 import { ref, computed, watch, onMounted, reactive } from 'vue';
 import { useStore } from 'vuex';
+import { useAdmin } from 'dashboard/composables/useAdmin';
 import { gamificationAPI, goalsAPI, badgesAPI } from 'dashboard/api/kanban.js';
 
 const store = useStore();
 const agents = computed(() => store.getters['agents/getAgents'] || []);
-const currentRole = computed(() => store.getters['auth/getCurrentRole']);
-const isAdmin = computed(() => currentRole.value === 'administrator');
+const { isAdmin } = useAdmin();
 
 // ── Period ────────────────────────────────────────────────────────────────────
 const PERIODS = [
@@ -450,7 +450,9 @@ function initials(name) {
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-white dark:bg-slate-900 overflow-hidden">
+  <div
+    class="flex flex-col flex-1 h-full min-h-0 w-full bg-white dark:bg-slate-900 overflow-hidden"
+  >
     <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
     <div
       class="flex items-center gap-3 px-6 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0 flex-wrap"
