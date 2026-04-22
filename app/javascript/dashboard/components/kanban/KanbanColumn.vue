@@ -189,7 +189,7 @@ function onChange(event) {
       group="kanban"
       :animation="200"
       :force-fallback="false"
-      ghost-class="opacity-40 ring-2 ring-woot-400 ring-offset-1"
+      ghost-class="opacity-40"
       class="flex-1 overflow-y-auto p-2 space-y-2"
       :class="items.length === 0 ? 'min-h-[80px]' : ''"
       @start="onDragStart"
