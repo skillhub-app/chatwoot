@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { required, email } from '@vuelidate/validators';
 import { useVuelidate } from '@vuelidate/core';
@@ -299,6 +299,33 @@ const resetForm = () => {
   Object.assign(state, defaultState);
 };
 
+const cepLoading = ref(false);
+
+const lookupCep = async () => {
+  const clean = (state.additionalAttributes.zipCode || '').replace(/\D/g, '');
+  if (clean.length !== 8) return;
+  cepLoading.value = true;
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+    const json = await res.json();
+    if (!json.erro) {
+      state.additionalAttributes.street =
+        json.logradouro || state.additionalAttributes.street;
+      state.additionalAttributes.neighborhood =
+        json.bairro || state.additionalAttributes.neighborhood;
+      state.additionalAttributes.city =
+        json.localidade || state.additionalAttributes.city;
+      state.additionalAttributes.state =
+        json.uf || state.additionalAttributes.state;
+      emit('update', state);
+    }
+  } catch (e) {
+    // ignore lookup errors
+  } finally {
+    cepLoading.value = false;
+  }
+};
+
 watch(
   () => props.contactData?.id,
   id => {
@@ -417,17 +444,38 @@ defineExpose({
         t('CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.ADDRESS_TITLE')
       }}</span>
       <div class="grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
-        <Input
-          v-for="item in addressForm"
-          :key="item.key"
-          v-model="getFormBinding(item.key).value"
-          :placeholder="item.placeholder"
-          :custom-input-class="`h-8 !pt-1 !pb-1 ${
-            !isDetailsView ? '[&:not(.error,.focus)]:!outline-transparent' : ''
-          }`"
-          class="w-full"
-          @input="emit('update', state)"
-        />
+        <template v-for="item in addressForm" :key="item.key">
+          <div v-if="item.key === 'ZIP_CODE'" class="relative w-full">
+            <Input
+              v-model="getFormBinding(item.key).value"
+              :placeholder="item.placeholder"
+              :custom-input-class="`h-8 !pt-1 !pb-1 ${
+                !isDetailsView
+                  ? '[&:not(.error,.focus)]:!outline-transparent'
+                  : ''
+              }`"
+              class="w-full"
+              @input="emit('update', state)"
+              @blur="lookupCep"
+            />
+            <span
+              v-if="cepLoading"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 i-lucide-loader-circle size-3.5 animate-spin text-woot-500"
+            />
+          </div>
+          <Input
+            v-else
+            v-model="getFormBinding(item.key).value"
+            :placeholder="item.placeholder"
+            :custom-input-class="`h-8 !pt-1 !pb-1 ${
+              !isDetailsView
+                ? '[&:not(.error,.focus)]:!outline-transparent'
+                : ''
+            }`"
+            class="w-full"
+            @input="emit('update', state)"
+          />
+        </template>
       </div>
     </div>
 
