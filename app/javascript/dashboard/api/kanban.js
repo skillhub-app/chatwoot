@@ -128,6 +128,32 @@ class KanbanItemSubresourceAPI extends ApiClient {
   }
 }
 
+class KanbanBadgesAPI extends ApiClient {
+  constructor() {
+    super('kanban/badges', { accountScoped: true });
+  }
+
+  list() {
+    return axios.get(this.url);
+  }
+
+  create(data) {
+    return axios.post(this.url, data);
+  }
+
+  update(id, data) {
+    return axios.patch(`${this.url}/${id}`, data);
+  }
+
+  delete(id) {
+    return axios.delete(`${this.url}/${id}`);
+  }
+
+  seed() {
+    return axios.post(`${this.url}/seed`);
+  }
+}
+
 class KanbanLostReasonsAPI extends ApiClient {
   constructor() {
     super('kanban/lost_reasons', { accountScoped: true });
@@ -204,6 +230,7 @@ class KanbanGoalsAPI extends ApiClient {
   }
 }
 
+export const badgesAPI = new KanbanBadgesAPI();
 export const pipelinesAPI = new KanbanPipelinesAPI();
 export const lostReasonsAPI = new KanbanLostReasonsAPI();
 export const globalItemsAPI = new KanbanGlobalItemsAPI();

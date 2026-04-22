@@ -121,6 +121,9 @@ Rails.application.routes.draw do
               collection { post :upsert }
             end
             resources :lost_reasons, only: [:index, :create, :update, :destroy]
+            resources :badges, only: [:index, :create, :update, :destroy] do
+              collection { post :seed }
+            end
             resources :pipelines, only: [:index, :show, :create, :update, :destroy] do
               resources :stages, only: [:index, :show, :create, :update, :destroy] do
                 patch :reorder, on: :member

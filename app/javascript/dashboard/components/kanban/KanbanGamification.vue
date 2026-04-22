@@ -1,10 +1,12 @@
 <script setup>
 import { ref, computed, watch, onMounted, reactive } from 'vue';
 import { useStore } from 'vuex';
-import { gamificationAPI, goalsAPI } from 'dashboard/api/kanban.js';
+import { gamificationAPI, goalsAPI, badgesAPI } from 'dashboard/api/kanban.js';
 
 const store = useStore();
 const agents = computed(() => store.getters['agents/getAgents'] || []);
+const currentRole = computed(() => store.getters['auth/getCurrentRole']);
+const isAdmin = computed(() => currentRole.value === 'administrator');
 
 // ── Period ────────────────────────────────────────────────────────────────────
 const PERIODS = [
@@ -50,6 +52,7 @@ const rankings = ref([]);
 const timelineEvents = ref([]);
 const goals = ref([]);
 const globalGoals = ref({ team_goal_value: 0, team_goal_won: 0 });
+const badgeDefs = ref([]);
 const loading = ref(false);
 
 // ── Settings drawer ───────────────────────────────────────────────────────────
@@ -58,18 +61,88 @@ const savingGoals = ref(false);
 const editGlobal = reactive({ team_goal_value: '', team_goal_won: '' });
 const editIndividualMap = ref({});
 
+// ── Badge management ──────────────────────────────────────────────────────────
+const showBadgeModal = ref(false);
+const savingBadge = ref(false);
+const deletingBadge = ref(null);
+const editBadge = reactive({
+  id: null,
+  name: '',
+  description: '',
+  icon: '🏅',
+  color:
+    'bg-slate-50 border-slate-200 text-slate-700 dark:bg-slate-900/20 dark:border-slate-700',
+  condition_type: 'won_gte',
+  condition_value: '',
+  active: true,
+});
+
+const CONDITION_TYPES = [
+  { id: 'won_gte', label: 'Negócios ganhos ≥' },
+  { id: 'value_gte', label: 'Faturamento total ≥ R$' },
+  { id: 'conversion_rate_gte', label: 'Taxa de conversão ≥ %' },
+  { id: 'max_deal_gte', label: 'Maior deal ≥ R$' },
+  { id: 'goal_pct_gte', label: 'Meta individual ≥ %' },
+  { id: 'rank_eq', label: 'Posição no ranking = (0 = 1º)' },
+];
+
+const BADGE_COLORS = [
+  {
+    label: 'Verde',
+    value:
+      'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-700',
+  },
+  {
+    label: 'Laranja',
+    value:
+      'bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-900/20 dark:border-orange-700',
+  },
+  {
+    label: 'Vermelho',
+    value:
+      'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-700',
+  },
+  {
+    label: 'Amarelo',
+    value:
+      'bg-yellow-50 border-yellow-200 text-yellow-700 dark:bg-yellow-900/20 dark:border-yellow-700',
+  },
+  {
+    label: 'Azul',
+    value:
+      'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-700',
+  },
+  {
+    label: 'Roxo',
+    value:
+      'bg-violet-50 border-violet-200 text-violet-700 dark:bg-violet-900/20 dark:border-violet-700',
+  },
+  {
+    label: 'Âmbar',
+    value:
+      'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-900/20 dark:border-amber-700',
+  },
+  {
+    label: 'Cinza',
+    value:
+      'bg-slate-50 border-slate-200 text-slate-700 dark:bg-slate-900/20 dark:border-slate-700',
+  },
+];
+
 // ── Load data ─────────────────────────────────────────────────────────────────
 async function loadData() {
   loading.value = true;
   try {
     if (!agents.value.length) store.dispatch('agents/get').catch(() => {});
     const pp = periodParams();
-    const [rankRes, timeRes, goalRes, globalRes] = await Promise.allSettled([
-      gamificationAPI.rankings(pp),
-      gamificationAPI.timeline({ ...pp, limit: 50 }),
-      goalsAPI.list(currentYear, currentMonth),
-      gamificationAPI.globalGoals(),
-    ]);
+    const [rankRes, timeRes, goalRes, globalRes, badgeRes] =
+      await Promise.allSettled([
+        gamificationAPI.rankings(pp),
+        gamificationAPI.timeline({ ...pp, limit: 50 }),
+        goalsAPI.list(currentYear, currentMonth),
+        gamificationAPI.globalGoals(),
+        badgesAPI.list(),
+      ]);
     if (rankRes.status === 'fulfilled')
       rankings.value = rankRes.value.data?.payload || [];
     if (timeRes.status === 'fulfilled')
@@ -78,6 +151,8 @@ async function loadData() {
       goals.value = goalRes.value.data?.payload || [];
     if (globalRes.status === 'fulfilled')
       globalGoals.value = globalRes.value.data?.payload || {};
+    if (badgeRes.status === 'fulfilled')
+      badgeDefs.value = badgeRes.value.data?.payload || [];
   } finally {
     loading.value = false;
   }
@@ -86,6 +161,7 @@ async function loadData() {
 watch(period, () => loadData());
 
 onMounted(async () => {
+  if (!agents.value.length) await store.dispatch('agents/get').catch(() => {});
   await loadData();
 });
 
@@ -98,6 +174,61 @@ const goalsMap = computed(() => {
   return m;
 });
 
+// ── Goal helpers ─────────────────────────────────────────────────────────────
+function goalPct(agentId) {
+  const g = goalsMap.value[agentId];
+  const r = rankings.value.find(x => x.agent.id === agentId);
+  if (!g || !r || !g.target_value) return 0;
+  return Math.min(100, (r.stats.value / g.target_value) * 100);
+}
+
+function goalWonPct(agentId) {
+  const g = goalsMap.value[agentId];
+  const r = rankings.value.find(x => x.agent.id === agentId);
+  if (!g || !r || !g.target_won) return 0;
+  return Math.min(100, (r.stats.won / g.target_won) * 100);
+}
+
+function agentWon(agentId) {
+  return rankings.value.find(r => r.agent.id === agentId)?.stats.won || 0;
+}
+
+function agentValue(agentId) {
+  return rankings.value.find(r => r.agent.id === agentId)?.stats.value || 0;
+}
+
+// ── Badge evaluation ──────────────────────────────────────────────────────────
+function evaluateBadge(badge, ranking, rankIdx) {
+  const v = badge.condition_value;
+  switch (badge.condition_type) {
+    case 'won_gte':
+      return ranking.stats.won >= v;
+    case 'value_gte':
+      return ranking.stats.value >= v;
+    case 'conversion_rate_gte':
+      return ranking.stats.conversion_rate >= v;
+    case 'max_deal_gte':
+      return ranking.stats.max_deal_value >= v;
+    case 'goal_pct_gte':
+      return goalPct(ranking.agent.id) >= v;
+    case 'rank_eq':
+      return rankIdx === v;
+    default:
+      return false;
+  }
+}
+
+const agentBadges = computed(() => {
+  const map = {};
+  rankings.value.forEach((r, idx) => {
+    map[r.agent.id] = badgeDefs.value.filter(
+      b => b.active && evaluateBadge(b, r, idx)
+    );
+  });
+  return map;
+});
+
+// ── Settings ─────────────────────────────────────────────────────────────────
 function openSettings() {
   editGlobal.team_goal_value = globalGoals.value.team_goal_value || '';
   editGlobal.team_goal_won = globalGoals.value.team_goal_won || '';
@@ -105,8 +236,8 @@ function openSettings() {
   agents.value.forEach(a => {
     const g = goalsMap.value[a.id];
     map[a.id] = {
-      target_value: g?.target_value || '',
-      target_won: g?.target_won || '',
+      target_value: g?.target_value != null ? String(g.target_value) : '',
+      target_won: g?.target_won != null ? String(g.target_won) : '',
     };
   });
   editIndividualMap.value = map;
@@ -121,23 +252,20 @@ async function saveSettings() {
       team_goal_won: parseInt(editGlobal.team_goal_won, 10) || 0,
     });
     const upserts = agents.value
-      .filter(a => {
-        const e = editIndividualMap.value[a.id];
-        return (
-          e &&
-          (parseFloat(e.target_value) > 0 || parseInt(e.target_won, 10) > 0)
-        );
-      })
       .map(a => {
         const e = editIndividualMap.value[a.id];
+        if (!e) return null;
+        const tv = parseFloat(e.target_value) || 0;
+        const tw = parseInt(e.target_won, 10) || 0;
         return goalsAPI.upsert({
           assignee_id: a.id,
           year: currentYear,
           month: currentMonth,
-          target_value: parseFloat(e.target_value) || 0,
-          target_won: parseInt(e.target_won, 10) || 0,
+          target_value: tv,
+          target_won: tw,
         });
-      });
+      })
+      .filter(Boolean);
     await Promise.all(upserts);
     showSettings.value = false;
     await loadData();
@@ -146,7 +274,78 @@ async function saveSettings() {
   }
 }
 
-// Podium display order: [silver, gold, bronze]
+// ── Badge CRUD ────────────────────────────────────────────────────────────────
+function openNewBadge() {
+  editBadge.id = null;
+  editBadge.name = '';
+  editBadge.description = '';
+  editBadge.icon = '🏅';
+  editBadge.color = BADGE_COLORS[0].value;
+  editBadge.condition_type = 'won_gte';
+  editBadge.condition_value = '';
+  editBadge.active = true;
+  showBadgeModal.value = true;
+}
+
+function openEditBadge(badge) {
+  editBadge.id = badge.id;
+  editBadge.name = badge.name;
+  editBadge.description = badge.description || '';
+  editBadge.icon = badge.icon;
+  editBadge.color = badge.color;
+  editBadge.condition_type = badge.condition_type;
+  editBadge.condition_value = String(badge.condition_value);
+  editBadge.active = badge.active;
+  showBadgeModal.value = true;
+}
+
+async function saveBadge() {
+  savingBadge.value = true;
+  try {
+    const data = {
+      name: editBadge.name,
+      description: editBadge.description,
+      icon: editBadge.icon,
+      color: editBadge.color,
+      condition_type: editBadge.condition_type,
+      condition_value: parseFloat(editBadge.condition_value) || 0,
+      active: editBadge.active,
+    };
+    if (editBadge.id) {
+      await badgesAPI.update(editBadge.id, data);
+    } else {
+      await badgesAPI.create(data);
+    }
+    showBadgeModal.value = false;
+    await loadData();
+  } finally {
+    savingBadge.value = false;
+  }
+}
+
+async function deleteBadge(id) {
+  deletingBadge.value = id;
+  try {
+    await badgesAPI.delete(id);
+    await loadData();
+  } finally {
+    deletingBadge.value = null;
+  }
+}
+
+async function resetBadges() {
+  if (
+    !window.confirm(
+      'Restaurar as conquistas padrão? As conquistas existentes serão apagadas.'
+    )
+  )
+    return;
+  await badgesAPI.seed();
+  await loadData();
+}
+
+// ── Podium ────────────────────────────────────────────────────────────────────
+// Display order: [2nd/silver, 1st/gold, 3rd/bronze]
 const podiumItems = computed(() => {
   const top = rankings.value.slice(0, 3);
   if (top.length === 0) return [];
@@ -155,9 +354,40 @@ const podiumItems = computed(() => {
   return [top[1], top[0], top[2]];
 });
 
-// Map podium display index → actual rank (0=gold, 1=silver, 2=bronze)
+// For each display slot: rank index (0=gold/1st, 1=silver/2nd, 2=bronze/3rd)
 const PODIUM_RANKS = [1, 0, 2];
 
+const MEDAL = [
+  {
+    ring: 'ring-amber-400',
+    bg: 'bg-gradient-to-b from-amber-300 to-amber-500',
+    label: 'bg-amber-500',
+    emoji: '🥇',
+    step: 'h-28',
+    num: '1',
+    numColor: 'text-amber-600',
+  },
+  {
+    ring: 'ring-slate-400',
+    bg: 'bg-gradient-to-b from-slate-300 to-slate-400',
+    label: 'bg-slate-400',
+    emoji: '🥈',
+    step: 'h-20',
+    num: '2',
+    numColor: 'text-slate-500',
+  },
+  {
+    ring: 'ring-amber-700',
+    bg: 'bg-gradient-to-b from-amber-600 to-amber-700',
+    label: 'bg-amber-700',
+    emoji: '🥉',
+    step: 'h-14',
+    num: '3',
+    numColor: 'text-amber-700',
+  },
+];
+
+// ── Team metrics ─────────────────────────────────────────────────────────────
 const teamTotalWon = computed(() =>
   rankings.value.reduce((s, r) => s + r.stats.won, 0)
 );
@@ -178,113 +408,6 @@ const teamGoalWonPct = computed(() => {
     (teamTotalWon.value / globalGoals.value.team_goal_won) * 100
   ).toFixed(1);
 });
-
-// ── Goal helpers ─────────────────────────────────────────────────────────────
-function goalPct(agentId) {
-  const g = goalsMap.value[agentId];
-  const r = rankings.value.find(x => x.agent.id === agentId);
-  if (!g || !r || !g.target_value) return 0;
-  return Math.min(100, (r.stats.value / g.target_value) * 100);
-}
-
-// ── Badges ───────────────────────────────────────────────────────────────────
-const BADGE_DEFS = [
-  {
-    id: 'primeira_venda',
-    name: 'Primeira Venda',
-    icon: '🎯',
-    desc: 'Fechou ao menos 1 negócio',
-    check: r => r.stats.won >= 1,
-    color:
-      'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-700',
-  },
-  {
-    id: 'cinco_vendas',
-    name: 'Cinco em Campo',
-    icon: '🔥',
-    desc: '5 ou mais negócios fechados',
-    check: r => r.stats.won >= 5,
-    color:
-      'bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-900/20 dark:border-orange-700',
-  },
-  {
-    id: 'dez_vendas',
-    name: 'Máquina de Vendas',
-    icon: '🏭',
-    desc: '10 ou mais negócios fechados',
-    check: r => r.stats.won >= 10,
-    color:
-      'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-700',
-  },
-  {
-    id: 'conversor',
-    name: 'Conversor',
-    icon: '⚡',
-    desc: 'Taxa de conversão acima de 70%',
-    check: r => r.stats.conversion_rate >= 70,
-    color:
-      'bg-yellow-50 border-yellow-200 text-yellow-700 dark:bg-yellow-900/20 dark:border-yellow-700',
-  },
-  {
-    id: 'grande_negocio',
-    name: 'Grande Negócio',
-    icon: '💎',
-    desc: 'Fechou deal acima de R$ 10.000',
-    check: r => r.stats.max_deal_value >= 10000,
-    color:
-      'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-700',
-  },
-  {
-    id: 'meta_batida',
-    name: 'Meta Batida',
-    icon: '🏆',
-    desc: 'Atingiu 100% da meta individual',
-    check: r => goalPct(r.agent.id) >= 100,
-    color:
-      'bg-woot-50 border-woot-200 text-woot-700 dark:bg-woot-900/20 dark:border-woot-700',
-  },
-  {
-    id: 'lider',
-    name: 'Líder do Período',
-    icon: '👑',
-    desc: 'Maior pontuação do período',
-    check: (r, idx) => idx === 0,
-    color:
-      'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-900/20 dark:border-amber-700',
-  },
-  {
-    id: 'faturamento_50k',
-    name: 'R$ 50K+ Club',
-    icon: '💰',
-    desc: 'R$ 50.000 ou mais em faturamento',
-    check: r => r.stats.value >= 50000,
-    color:
-      'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-700',
-  },
-];
-
-const agentBadges = computed(() => {
-  const map = {};
-  rankings.value.forEach((r, idx) => {
-    map[r.agent.id] = BADGE_DEFS.filter(b => b.check(r, idx));
-  });
-  return map;
-});
-
-function goalWonPct(agentId) {
-  const g = goalsMap.value[agentId];
-  const r = rankings.value.find(x => x.agent.id === agentId);
-  if (!g || !r || !g.target_won) return 0;
-  return Math.min(100, (r.stats.won / g.target_won) * 100);
-}
-
-function agentWon(agentId) {
-  return rankings.value.find(r => r.agent.id === agentId)?.stats.won || 0;
-}
-
-function agentValue(agentId) {
-  return rankings.value.find(r => r.agent.id === agentId)?.stats.value || 0;
-}
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 function fBRL(val) {
@@ -324,37 +447,13 @@ function initials(name) {
     .join('')
     .toUpperCase();
 }
-
-const MEDAL = [
-  {
-    ring: 'ring-amber-400',
-    bg: 'bg-gradient-to-b from-amber-300 to-amber-400',
-    emoji: '🥇',
-    bar: 'from-amber-400 to-amber-300',
-    h: 'h-24',
-  },
-  {
-    ring: 'ring-slate-400',
-    bg: 'bg-gradient-to-b from-slate-300 to-slate-400',
-    emoji: '🥈',
-    bar: 'from-slate-400 to-slate-300',
-    h: 'h-16',
-  },
-  {
-    ring: 'ring-amber-700',
-    bg: 'bg-gradient-to-b from-amber-600 to-amber-700',
-    emoji: '🥉',
-    bar: 'from-amber-700 to-amber-600',
-    h: 'h-12',
-  },
-];
 </script>
 
 <template>
   <div class="flex flex-col h-full bg-white dark:bg-slate-900 overflow-hidden">
-    <!-- ── Top bar ───────────────────────────────────────────────────────────── -->
+    <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
     <div
-      class="flex items-center gap-3 px-5 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0 flex-wrap"
+      class="flex items-center gap-3 px-6 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0 flex-wrap"
     >
       <div class="flex items-center gap-2">
         <span class="i-lucide-trophy size-5 text-amber-500" />
@@ -409,12 +508,12 @@ const MEDAL = [
           @click="openSettings"
         >
           <span class="i-lucide-settings size-3.5" />
-          Configurações
+          Metas
         </button>
       </div>
     </div>
 
-    <!-- ── Tab bar ───────────────────────────────────────────────────────────── -->
+    <!-- ── Tab bar ─────────────────────────────────────────────────────────── -->
     <div
       class="flex items-center border-b border-slate-200 dark:border-slate-700 shrink-0 overflow-x-auto bg-white dark:bg-slate-900"
     >
@@ -434,15 +533,12 @@ const MEDAL = [
       </button>
     </div>
 
-    <!-- ── Tab content ───────────────────────────────────────────────────────── -->
+    <!-- ── Tab content ─────────────────────────────────────────────────────── -->
     <div class="flex-1 overflow-y-auto">
-      <!-- ════ VISÃO GERAL ════════════════════════════════════════════════════ -->
-      <div
-        v-if="activeTab === 'overview'"
-        class="p-5 space-y-6 max-w-5xl mx-auto"
-      >
-        <!-- Team KPI cards -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <!-- ════ VISÃO GERAL ══════════════════════════════════════════════════ -->
+      <div v-if="activeTab === 'overview'" class="p-6 space-y-6">
+        <!-- KPI row -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div
             class="rounded-xl p-4 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
           >
@@ -526,116 +622,208 @@ const MEDAL = [
           </div>
         </div>
 
-        <!-- Podium -->
-        <div v-if="rankings.length > 0">
-          <h2
-            class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-5 flex items-center gap-2"
+        <!-- Podium + timeline side-by-side on large screens -->
+        <div
+          v-if="rankings.length > 0"
+          class="grid grid-cols-1 xl:grid-cols-5 gap-6"
+        >
+          <!-- Podium (3 cols on xl) -->
+          <div
+            class="xl:col-span-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6"
           >
-            <span class="i-lucide-trophy size-3.5 text-amber-500" />
-            Top 3 do Período
-          </h2>
-
-          <div class="flex items-end justify-center gap-6 pb-2">
-            <div
-              v-for="(entry, dispIdx) in podiumItems"
-              :key="dispIdx"
-              class="flex flex-col items-center"
+            <h2
+              class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-6 flex items-center gap-2"
             >
-              <template v-if="entry">
-                <!-- Crown for 1st (display center = gold) -->
-                <span
-                  v-if="PODIUM_RANKS[dispIdx] === 0"
-                  class="text-3xl mb-1 animate-bounce"
-                  >👑</span
-                >
+              <span class="i-lucide-trophy size-3.5 text-amber-500" />
+              Top 3 do Período
+            </h2>
 
-                <!-- Avatar -->
-                <div
-                  class="relative mb-2 ring-4 rounded-full shadow-lg"
-                  :class="[
-                    MEDAL[PODIUM_RANKS[dispIdx]].ring,
-                    PODIUM_RANKS[dispIdx] === 0 ? 'size-20' : 'size-14',
-                  ]"
-                >
+            <div class="flex items-end justify-center gap-2">
+              <div
+                v-for="(entry, dispIdx) in podiumItems"
+                :key="dispIdx"
+                class="flex flex-col items-center"
+                :class="
+                  PODIUM_RANKS[dispIdx] === 0
+                    ? 'flex-1 max-w-48'
+                    : 'flex-1 max-w-36'
+                "
+              >
+                <template v-if="entry">
+                  <!-- Crown for gold -->
+                  <span
+                    v-if="PODIUM_RANKS[dispIdx] === 0"
+                    class="text-3xl mb-1 animate-bounce"
+                    >👑</span
+                  >
+                  <div v-else class="h-9" />
+
+                  <!-- Avatar -->
+                  <div
+                    class="relative mb-2 ring-4 rounded-full shadow-lg shrink-0"
+                    :class="[
+                      MEDAL[PODIUM_RANKS[dispIdx]].ring,
+                      PODIUM_RANKS[dispIdx] === 0 ? 'size-20' : 'size-14',
+                    ]"
+                  >
+                    <img
+                      v-if="entry.agent.avatar_url"
+                      :src="entry.agent.avatar_url"
+                      :alt="entry.agent.name"
+                      class="rounded-full object-cover w-full h-full"
+                    />
+                    <div
+                      v-else
+                      class="rounded-full w-full h-full flex items-center justify-center text-white font-bold"
+                      :class="[
+                        MEDAL[PODIUM_RANKS[dispIdx]].bg,
+                        PODIUM_RANKS[dispIdx] === 0 ? 'text-xl' : 'text-base',
+                      ]"
+                    >
+                      {{ initials(entry.agent.name) }}
+                    </div>
+                  </div>
+
+                  <!-- Name + stats -->
+                  <p
+                    class="text-sm font-bold text-slate-800 dark:text-slate-100 truncate text-center w-full px-1"
+                  >
+                    {{ entry.agent.name.split(' ')[0] }}
+                  </p>
+                  <p
+                    class="text-xs font-semibold text-green-600 dark:text-green-400 mt-0.5"
+                  >
+                    {{ fBRL(entry.stats.value) }}
+                  </p>
+                  <p class="text-[10px] text-slate-400">
+                    {{ entry.stats.won }} venda{{
+                      entry.stats.won !== 1 ? 's' : ''
+                    }}
+                  </p>
+
+                  <!-- Badges -->
+                  <div
+                    v-if="agentBadges[entry.agent.id]?.length"
+                    class="flex gap-0.5 mt-1 flex-wrap justify-center"
+                  >
+                    <span
+                      v-for="b in agentBadges[entry.agent.id].slice(0, 4)"
+                      :key="b.id"
+                      :title="b.name"
+                      class="text-sm"
+                      >{{ b.icon }}</span
+                    >
+                  </div>
+
+                  <!-- Podium step block -->
+                  <div
+                    class="w-full rounded-t-xl mt-3 flex flex-col items-center justify-end pb-2 relative"
+                    :class="[
+                      MEDAL[PODIUM_RANKS[dispIdx]].label,
+                      MEDAL[PODIUM_RANKS[dispIdx]].step,
+                    ]"
+                  >
+                    <span
+                      class="text-4xl font-black text-white/30 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 select-none"
+                      >{{ MEDAL[PODIUM_RANKS[dispIdx]].num }}</span
+                    >
+                    <span class="text-white font-bold text-xs relative z-10"
+                      >{{ entry.points }}pts</span
+                    >
+                  </div>
+                </template>
+                <template v-else>
+                  <div class="h-9" />
+                  <div
+                    class="size-14 rounded-full bg-slate-100 dark:bg-slate-700 mb-2 ring-4 ring-slate-200 dark:ring-slate-600"
+                  />
+                  <p class="text-xs text-slate-300 dark:text-slate-600">—</p>
+                  <div class="h-5" />
+                  <div
+                    class="w-full rounded-t-xl mt-3 bg-slate-100 dark:bg-slate-800 flex items-center justify-center"
+                    :class="PODIUM_RANKS[dispIdx] === 1 ? 'h-20' : 'h-14'"
+                  >
+                    <span
+                      class="text-4xl font-black text-slate-200 dark:text-slate-700 select-none"
+                      >{{ MEDAL[PODIUM_RANKS[dispIdx]].num }}</span
+                    >
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent activity (2 cols on xl) -->
+          <div
+            class="xl:col-span-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 flex flex-col"
+          >
+            <h2
+              class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3 flex items-center gap-2"
+            >
+              <span class="i-lucide-activity size-3.5" />
+              Últimas Ações
+            </h2>
+            <div class="space-y-2 flex-1 overflow-y-auto">
+              <div
+                v-for="ev in timelineEvents.slice(0, 10)"
+                :key="ev.id"
+                class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700"
+              >
+                <div v-if="ev.agent" class="shrink-0">
                   <img
-                    v-if="entry.agent.avatar_url"
-                    :src="entry.agent.avatar_url"
-                    :alt="entry.agent.name"
-                    class="rounded-full object-cover w-full h-full"
+                    v-if="ev.agent.avatar_url"
+                    :src="ev.agent.avatar_url"
+                    class="size-6 rounded-full object-cover"
                   />
                   <div
                     v-else
-                    class="rounded-full w-full h-full flex items-center justify-center text-white font-bold"
-                    :class="[
-                      MEDAL[PODIUM_RANKS[dispIdx]].bg,
-                      PODIUM_RANKS[dispIdx] === 0 ? 'text-2xl' : 'text-base',
-                    ]"
+                    class="size-6 rounded-full bg-woot-100 dark:bg-woot-800 flex items-center justify-center text-[9px] font-bold text-woot-600"
                   >
-                    {{ initials(entry.agent.name) }}
+                    {{ initials(ev.agent.name) }}
                   </div>
-                  <span class="absolute -bottom-1.5 -right-1 text-xl">
-                    {{ MEDAL[PODIUM_RANKS[dispIdx]].emoji }}
-                  </span>
                 </div>
-
-                <!-- Name -->
-                <p
-                  class="text-sm font-bold text-slate-800 dark:text-slate-100 truncate text-center max-w-28"
-                >
-                  {{ entry.agent.name.split(' ')[0] }}
-                </p>
-                <p
-                  class="text-xs font-semibold text-green-600 dark:text-green-400 mt-0.5"
-                >
-                  {{ fBRL(entry.stats.value) }}
-                </p>
-                <p class="text-[10px] text-slate-400">
-                  {{ entry.stats.won }} venda{{
-                    entry.stats.won !== 1 ? 's' : ''
-                  }}
-                </p>
-
-                <!-- Badges -->
-                <div
-                  v-if="agentBadges[entry.agent.id]?.length"
-                  class="flex gap-0.5 mt-1.5 flex-wrap justify-center max-w-28"
-                >
-                  <span
-                    v-for="b in agentBadges[entry.agent.id].slice(0, 4)"
-                    :key="b.id"
-                    :title="b.name"
-                    class="text-sm"
-                    >{{ b.icon }}</span
+                <div class="flex-1 min-w-0">
+                  <p
+                    class="text-[11px] text-slate-700 dark:text-slate-200 truncate"
                   >
-                </div>
-
-                <!-- Podium bar -->
-                <div
-                  class="w-28 rounded-t-xl mt-3 flex items-center justify-center bg-gradient-to-t"
-                  :class="[
-                    MEDAL[PODIUM_RANKS[dispIdx]].bar,
-                    MEDAL[PODIUM_RANKS[dispIdx]].h,
-                  ]"
-                >
-                  <span class="text-white font-bold text-sm"
-                    >{{ entry.points }}pt</span
+                    <span class="font-semibold">{{
+                      ev.agent?.name?.split(' ')[0] || 'Sistema'
+                    }}</span>
+                    {{
+                      ev.action_type === 'won'
+                        ? ' fechou'
+                        : ev.action_type === 'lost'
+                          ? ' perdeu'
+                          : ' reabriu'
+                    }}
+                    <span class="font-medium"> "{{ ev.item.title }}"</span>
+                  </p>
+                  <p
+                    v-if="ev.item.value"
+                    class="text-[10px] text-green-600 font-semibold"
                   >
+                    {{ fBRL(ev.item.value) }}
+                  </p>
                 </div>
-              </template>
-              <template v-else>
-                <div
-                  class="w-28 rounded-t-xl mt-3 bg-slate-100 dark:bg-slate-800"
-                  :class="PODIUM_RANKS[dispIdx] === 1 ? 'h-16' : 'h-12'"
-                />
-              </template>
+                <span class="text-[10px] text-slate-400 shrink-0">{{
+                  fRelative(ev.created_at)
+                }}</span>
+                <span class="shrink-0">{{
+                  ev.action_type === 'won'
+                    ? '🏆'
+                    : ev.action_type === 'lost'
+                      ? '❌'
+                      : '🔄'
+                }}</span>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- Empty -->
+        <!-- Empty state -->
         <div
           v-else-if="!loading"
-          class="flex flex-col items-center justify-center py-16 text-center"
+          class="flex flex-col items-center justify-center py-20 text-center"
         >
           <span
             class="i-lucide-bar-chart-3 size-12 text-slate-300 dark:text-slate-600 mb-3"
@@ -647,72 +835,10 @@ const MEDAL = [
             Marque negócios como Ganho no Kanban para ver o ranking aqui.
           </p>
         </div>
-
-        <!-- Recent timeline mini -->
-        <div v-if="timelineEvents.length">
-          <h2
-            class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3 flex items-center gap-2"
-          >
-            <span class="i-lucide-activity size-3.5" />
-            Últimas Conquistas
-          </h2>
-          <div class="space-y-2">
-            <div
-              v-for="ev in timelineEvents.slice(0, 8)"
-              :key="ev.id"
-              class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700"
-            >
-              <div v-if="ev.agent" class="shrink-0">
-                <img
-                  v-if="ev.agent.avatar_url"
-                  :src="ev.agent.avatar_url"
-                  class="size-7 rounded-full object-cover"
-                />
-                <div
-                  v-else
-                  class="size-7 rounded-full bg-woot-100 dark:bg-woot-800 flex items-center justify-center text-[10px] font-bold text-woot-600"
-                >
-                  {{ initials(ev.agent.name) }}
-                </div>
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="text-xs text-slate-700 dark:text-slate-200 truncate">
-                  <span class="font-semibold">{{
-                    ev.agent?.name || 'Sistema'
-                  }}</span>
-                  {{
-                    ev.action_type === 'won'
-                      ? ' fechou'
-                      : ev.action_type === 'lost'
-                        ? ' perdeu'
-                        : ' reabriu'
-                  }}
-                  <span class="font-medium"> "{{ ev.item.title }}"</span>
-                  <span
-                    v-if="ev.item.value"
-                    class="text-green-600 font-semibold"
-                  >
-                    · {{ fBRL(ev.item.value) }}</span
-                  >
-                </p>
-              </div>
-              <span class="text-[10px] text-slate-400 shrink-0">{{
-                fRelative(ev.created_at)
-              }}</span>
-              <span class="shrink-0 text-base">{{
-                ev.action_type === 'won'
-                  ? '🏆'
-                  : ev.action_type === 'lost'
-                    ? '❌'
-                    : '🔄'
-              }}</span>
-            </div>
-          </div>
-        </div>
       </div>
 
-      <!-- ════ RANKING ════════════════════════════════════════════════════════ -->
-      <div v-else-if="activeTab === 'ranking'" class="p-5 max-w-5xl mx-auto">
+      <!-- ════ RANKING ══════════════════════════════════════════════════════ -->
+      <div v-else-if="activeTab === 'ranking'" class="p-6">
         <div
           v-if="rankings.length"
           class="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden"
@@ -843,9 +969,8 @@ const MEDAL = [
                           ? 'text-green-600'
                           : 'text-slate-500'
                       "
+                      >{{ goalPct(entry.agent.id).toFixed(0) }}%</span
                     >
-                      {{ goalPct(entry.agent.id).toFixed(0) }}%
-                    </span>
                     <div
                       class="w-16 h-1 rounded-full bg-slate-200 dark:bg-slate-700 mt-1"
                     >
@@ -881,7 +1006,7 @@ const MEDAL = [
                         5
                       )"
                       :key="b.id"
-                      :title="b.name + ': ' + b.desc"
+                      :title="b.name + ': ' + b.description"
                       class="text-sm cursor-help"
                       >{{ b.icon }}</span
                     >
@@ -904,11 +1029,8 @@ const MEDAL = [
         </div>
       </div>
 
-      <!-- ════ METAS ══════════════════════════════════════════════════════════ -->
-      <div
-        v-else-if="activeTab === 'goals'"
-        class="p-5 space-y-5 max-w-4xl mx-auto"
-      >
+      <!-- ════ METAS ════════════════════════════════════════════════════════ -->
+      <div v-else-if="activeTab === 'goals'" class="p-6 space-y-5">
         <!-- Team goal banner -->
         <div
           v-if="globalGoals.team_goal_value || globalGoals.team_goal_won"
@@ -922,7 +1044,7 @@ const MEDAL = [
               Meta do Time
             </h3>
           </div>
-          <div class="grid grid-cols-2 gap-5">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div v-if="globalGoals.team_goal_value">
               <div class="flex justify-between text-xs mb-1.5">
                 <span class="text-slate-500">Faturamento</span>
@@ -994,20 +1116,30 @@ const MEDAL = [
 
         <!-- Individual cards -->
         <div>
-          <h3
-            class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3"
-          >
-            Metas Individuais —
-            {{
-              new Date().toLocaleString('pt-BR', {
-                month: 'long',
-                year: 'numeric',
-              })
-            }}
-          </h3>
+          <div class="flex items-center justify-between mb-3">
+            <h3
+              class="text-xs font-semibold text-slate-400 uppercase tracking-wide"
+            >
+              Metas Individuais —
+              {{
+                new Date().toLocaleString('pt-BR', {
+                  month: 'long',
+                  year: 'numeric',
+                })
+              }}
+            </h3>
+            <button
+              v-if="isAdmin"
+              class="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-woot-50 dark:bg-woot-900/30 text-woot-600 dark:text-woot-400 border border-woot-200 dark:border-woot-700 hover:bg-woot-100 dark:hover:bg-woot-900/50 font-medium transition-colors"
+              @click="openSettings"
+            >
+              <span class="i-lucide-pencil size-3" />
+              Editar metas
+            </button>
+          </div>
           <div
             v-if="agents.length"
-            class="grid grid-cols-1 md:grid-cols-2 gap-3"
+            class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
           >
             <div
               v-for="agent in agents"
@@ -1028,7 +1160,7 @@ const MEDAL = [
                 </div>
                 <div class="flex-1 min-w-0">
                   <p
-                    class="text-sm font-semibold text-slate-800 dark:text-slate-100"
+                    class="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate"
                   >
                     {{ agent.name }}
                   </p>
@@ -1112,28 +1244,85 @@ const MEDAL = [
                 v-if="!goalsMap[agent.id]"
                 class="text-xs text-slate-400 text-center py-1"
               >
-                Configure metas em Configurações
+                Configure metas clicando em "Editar metas"
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- ════ CONQUISTAS ═════════════════════════════════════════════════════ -->
-      <div v-else-if="activeTab === 'badges'" class="p-5 max-w-4xl mx-auto">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- ════ CONQUISTAS ══════════════════════════════════════════════════ -->
+      <div v-else-if="activeTab === 'badges'" class="p-6">
+        <!-- Admin controls -->
+        <div v-if="isAdmin" class="flex items-center justify-between mb-4">
+          <p class="text-xs text-slate-500">
+            Gerencie as conquistas da sua equipe. Somente administradores podem
+            editar.
+          </p>
+          <div class="flex items-center gap-2">
+            <button
+              class="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium transition-colors"
+              @click="resetBadges"
+            >
+              <span class="i-lucide-refresh-cw size-3" />
+              Restaurar padrão
+            </button>
+            <button
+              class="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-woot-500 text-white hover:bg-woot-600 font-medium transition-colors"
+              @click="openNewBadge"
+            >
+              <span class="i-lucide-plus size-3.5" />
+              Nova conquista
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           <div
-            v-for="badge in BADGE_DEFS"
+            v-for="badge in badgeDefs"
             :key="badge.id"
-            class="rounded-xl border p-4"
-            :class="badge.color"
+            class="rounded-xl border p-4 relative"
+            :class="[badge.color, !badge.active ? 'opacity-50' : '']"
           >
-            <div class="flex items-start gap-3">
+            <!-- Admin actions -->
+            <div
+              v-if="isAdmin"
+              class="absolute top-3 right-3 flex items-center gap-1"
+            >
+              <button
+                class="p-1 rounded hover:bg-black/10 transition-colors"
+                title="Editar"
+                @click="openEditBadge(badge)"
+              >
+                <span class="i-lucide-pencil size-3" />
+              </button>
+              <button
+                class="p-1 rounded hover:bg-red-100 text-red-600 transition-colors"
+                title="Apagar"
+                :disabled="deletingBadge === badge.id"
+                @click="deleteBadge(badge.id)"
+              >
+                <span
+                  v-if="deletingBadge === badge.id"
+                  class="i-lucide-loader-circle size-3 animate-spin"
+                />
+                <span v-else class="i-lucide-trash-2 size-3" />
+              </button>
+            </div>
+
+            <div class="flex items-start gap-3" :class="isAdmin ? 'pr-12' : ''">
               <span class="text-3xl shrink-0">{{ badge.icon }}</span>
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-bold mb-0.5">{{ badge.name }}</p>
-                <p class="text-xs opacity-70 mb-3">{{ badge.desc }}</p>
-                <div v-if="rankings.some((r, i) => badge.check(r, i))">
+                <div class="flex items-center gap-2 mb-0.5">
+                  <p class="text-sm font-bold">{{ badge.name }}</p>
+                  <span
+                    v-if="!badge.active"
+                    class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-black/10"
+                    >Inativa</span
+                  >
+                </div>
+                <p class="text-xs opacity-70 mb-3">{{ badge.description }}</p>
+                <div v-if="rankings.some((r, i) => evaluateBadge(badge, r, i))">
                   <p
                     class="text-[10px] font-semibold opacity-60 mb-1.5 uppercase tracking-wide"
                   >
@@ -1142,7 +1331,7 @@ const MEDAL = [
                   <div class="flex flex-wrap gap-1.5">
                     <div
                       v-for="entry in rankings.filter((r, i) =>
-                        badge.check(r, i)
+                        evaluateBadge(badge, r, i)
                       )"
                       :key="entry.agent.id"
                       class="flex items-center gap-1.5 bg-white/50 dark:bg-black/20 rounded-full px-2 py-0.5"
@@ -1170,10 +1359,27 @@ const MEDAL = [
             </div>
           </div>
         </div>
+
+        <div
+          v-if="!badgeDefs.length && !loading"
+          class="flex flex-col items-center py-16 text-center"
+        >
+          <span
+            class="i-lucide-award size-10 text-slate-300 dark:text-slate-600 mb-3"
+          />
+          <p class="text-sm text-slate-500">Nenhuma conquista configurada.</p>
+          <button
+            v-if="isAdmin"
+            class="mt-3 text-xs text-woot-600 hover:underline"
+            @click="openNewBadge"
+          >
+            Criar primeira conquista
+          </button>
+        </div>
       </div>
 
-      <!-- ════ TIMELINE ═══════════════════════════════════════════════════════ -->
-      <div v-else-if="activeTab === 'timeline'" class="p-5 max-w-3xl mx-auto">
+      <!-- ════ TIMELINE ════════════════════════════════════════════════════ -->
+      <div v-else-if="activeTab === 'timeline'" class="p-6">
         <div v-if="timelineEvents.length" class="space-y-2">
           <div
             v-for="ev in timelineEvents"
@@ -1264,20 +1470,20 @@ const MEDAL = [
       </div>
     </div>
 
-    <!-- ── Settings drawer ───────────────────────────────────────────────────── -->
+    <!-- ── Settings drawer (metas) ────────────────────────────────────────── -->
     <div
       v-if="showSettings"
       class="fixed inset-0 z-50 flex justify-end bg-black/20"
       @click.self="showSettings = false"
     >
       <div
-        class="w-full max-w-md bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 h-full flex flex-col overflow-hidden shadow-2xl"
+        class="w-full max-w-lg bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 h-full flex flex-col overflow-hidden shadow-2xl"
       >
         <div
           class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 shrink-0"
         >
           <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-100">
-            Configurações da Gamificação
+            Configurações de Metas
           </h3>
           <button
             class="text-slate-400 hover:text-slate-600"
@@ -1367,11 +1573,7 @@ const MEDAL = [
                       >Meta R$</label
                     >
                     <input
-                      v-if="
-                        editIndividualMap.value &&
-                        editIndividualMap.value[agent.id]
-                      "
-                      v-model="editIndividualMap.value[agent.id].target_value"
+                      v-model="editIndividualMap[agent.id].target_value"
                       type="number"
                       min="0"
                       placeholder="0"
@@ -1383,11 +1585,7 @@ const MEDAL = [
                       >Meta Vendas</label
                     >
                     <input
-                      v-if="
-                        editIndividualMap.value &&
-                        editIndividualMap.value[agent.id]
-                      "
-                      v-model="editIndividualMap.value[agent.id].target_won"
+                      v-model="editIndividualMap[agent.id].target_won"
                       type="number"
                       min="0"
                       placeholder="0"
@@ -1431,6 +1629,192 @@ const MEDAL = [
             @click="saveSettings"
           >
             {{ savingGoals ? 'Salvando...' : 'Salvar' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Badge modal ─────────────────────────────────────────────────────── -->
+    <div
+      v-if="showBadgeModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      @click.self="showBadgeModal = false"
+    >
+      <div
+        class="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden mx-4"
+      >
+        <div
+          class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700"
+        >
+          <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            {{ editBadge.id ? 'Editar conquista' : 'Nova conquista' }}
+          </h3>
+          <button
+            class="text-slate-400 hover:text-slate-600"
+            @click="showBadgeModal = false"
+          >
+            <span class="i-lucide-x size-5" />
+          </button>
+        </div>
+
+        <div class="px-5 py-5 space-y-4 overflow-y-auto max-h-[70vh]">
+          <!-- Preview -->
+          <div
+            class="rounded-xl border p-3 flex items-center gap-3"
+            :class="editBadge.color"
+          >
+            <span class="text-3xl">{{ editBadge.icon || '🏅' }}</span>
+            <div>
+              <p class="text-sm font-bold">
+                {{ editBadge.name || 'Nome da conquista' }}
+              </p>
+              <p class="text-xs opacity-70">
+                {{ editBadge.description || 'Descrição' }}
+              </p>
+            </div>
+          </div>
+
+          <!-- Icon + Name row -->
+          <div class="grid grid-cols-4 gap-3">
+            <div>
+              <label
+                class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                >Ícone</label
+              >
+              <input
+                v-model="editBadge.icon"
+                type="text"
+                maxlength="4"
+                placeholder="🏅"
+                class="w-full text-center text-xl border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-woot-500"
+              />
+            </div>
+            <div class="col-span-3">
+              <label
+                class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                >Nome *</label
+              >
+              <input
+                v-model="editBadge.name"
+                type="text"
+                placeholder="Nome da conquista"
+                class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+              />
+            </div>
+          </div>
+
+          <!-- Description -->
+          <div>
+            <label
+              class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+              >Descrição</label
+            >
+            <input
+              v-model="editBadge.description"
+              type="text"
+              placeholder="Explique como conquistar este badge"
+              class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+            />
+          </div>
+
+          <!-- Condition -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label
+                class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                >Condição *</label
+              >
+              <select
+                v-model="editBadge.condition_type"
+                class="w-full text-xs border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+              >
+                <option
+                  v-for="ct in CONDITION_TYPES"
+                  :key="ct.id"
+                  :value="ct.id"
+                >
+                  {{ ct.label }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label
+                class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                >Valor</label
+              >
+              <input
+                v-model="editBadge.condition_value"
+                type="number"
+                min="0"
+                placeholder="0"
+                class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+              />
+            </div>
+          </div>
+
+          <!-- Color -->
+          <div>
+            <label
+              class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-2"
+              >Cor</label
+            >
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="c in BADGE_COLORS"
+                :key="c.value"
+                class="px-3 py-1 rounded-lg border text-xs font-medium transition-all"
+                :class="[
+                  c.value,
+                  editBadge.color === c.value
+                    ? 'ring-2 ring-offset-1 ring-woot-500'
+                    : '',
+                ]"
+                @click="editBadge.color = c.value"
+              >
+                {{ c.label }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Active toggle -->
+          <div class="flex items-center gap-3">
+            <button
+              class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
+              :class="
+                editBadge.active
+                  ? 'bg-woot-500'
+                  : 'bg-slate-300 dark:bg-slate-600'
+              "
+              @click="editBadge.active = !editBadge.active"
+            >
+              <span
+                class="inline-block size-4 rounded-full bg-white shadow transform transition-transform"
+                :class="editBadge.active ? 'translate-x-4' : 'translate-x-0.5'"
+              />
+            </button>
+            <label
+              class="text-xs font-medium text-slate-600 dark:text-slate-300"
+            >
+              {{ editBadge.active ? 'Ativa' : 'Inativa' }}
+            </label>
+          </div>
+        </div>
+
+        <div
+          class="px-5 py-3 bg-slate-50 dark:bg-slate-900 flex justify-end gap-2 border-t border-slate-200 dark:border-slate-700"
+        >
+          <button
+            class="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-medium transition-colors"
+            @click="showBadgeModal = false"
+          >
+            Cancelar
+          </button>
+          <button
+            :disabled="savingBadge || !editBadge.name"
+            class="text-xs px-4 py-1.5 rounded-lg bg-woot-500 text-white hover:bg-woot-600 font-medium transition-colors disabled:opacity-50"
+            @click="saveBadge"
+          >
+            {{ savingBadge ? 'Salvando...' : 'Salvar' }}
           </button>
         </div>
       </div>
