@@ -1,352 +1,393 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
-import { gamificationAPI } from 'dashboard/api/kanban';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { gamificationAPI, goalsAPI, badgesAPI } from 'dashboard/api/kanban';
 
 const rankings = ref([]);
 const overview = ref(null);
-const recentWins = ref([]);
-const lastUpdated = ref(null);
-const tick = ref(0);
+const goals = ref([]);
+const badgeDefs = ref([]);
+const lastUpdated = ref('');
 let interval = null;
 
-const MEDALS = ['🥇', '🥈', '🥉'];
+const now = new Date();
+const currentYear = now.getFullYear();
+const currentMonth = now.getMonth() + 1;
+
+const PERIOD_LABEL = computed(() => {
+  const d = new Date();
+  return d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+});
+
+// Podium display: [2nd, 1st, 3rd]
+const podiumItems = computed(() => {
+  const top = rankings.value.slice(0, 3);
+  if (!top.length) return [];
+  if (top.length === 1) return [null, top[0], null];
+  if (top.length === 2) return [top[1], top[0], null];
+  return [top[1], top[0], top[2]];
+});
+const PODIUM_RANKS = [1, 0, 2];
+
+const goalsMap = computed(() => {
+  const m = {};
+  goals.value.forEach(g => {
+    m[g.assignee_id] = g;
+  });
+  return m;
+});
+
+function evaluateBadge(badge, ranking, rankIdx) {
+  const v = badge.condition_value;
+  switch (badge.condition_type) {
+    case 'won_gte':
+      return ranking.stats.won >= v;
+    case 'value_gte':
+      return ranking.stats.value >= v;
+    case 'conversion_rate_gte':
+      return ranking.stats.conversion_rate >= v;
+    case 'max_deal_gte':
+      return ranking.stats.max_deal_value >= v;
+    case 'goal_pct_gte': {
+      const g = goalsMap.value[ranking.agent.id];
+      if (!g || !g.target_value) return false;
+      return Math.min(100, (ranking.stats.value / g.target_value) * 100) >= v;
+    }
+    case 'rank_eq':
+      return rankIdx === v;
+    default:
+      return false;
+  }
+}
+
+const agentBadges = computed(() => {
+  const map = {};
+  rankings.value.forEach((r, idx) => {
+    map[r.agent.id] = badgeDefs.value.filter(
+      b => b.active && evaluateBadge(b, r, idx)
+    );
+  });
+  return map;
+});
+
+const teamTotalValue = computed(() =>
+  rankings.value.reduce((s, r) => s + r.stats.value, 0)
+);
+const teamTotalWon = computed(() =>
+  rankings.value.reduce((s, r) => s + r.stats.won, 0)
+);
 
 async function loadData() {
   try {
-    const [r, o, w] = await Promise.all([
-      gamificationAPI.rankings(),
-      gamificationAPI.overview(),
-      gamificationAPI.recentWins(),
+    const [rankRes, overRes, goalRes, badgeRes] = await Promise.allSettled([
+      gamificationAPI.rankings({ period: 'month' }),
+      gamificationAPI.overview({ period: 'month' }),
+      goalsAPI.list(currentYear, currentMonth),
+      badgesAPI.list(),
     ]);
-    rankings.value = r.data.payload;
-    overview.value = o.data.payload;
-    recentWins.value = w.data.payload.slice(0, 8);
+    if (rankRes.status === 'fulfilled')
+      rankings.value = rankRes.value.data?.payload || [];
+    if (overRes.status === 'fulfilled')
+      overview.value = overRes.value.data?.payload || null;
+    if (goalRes.status === 'fulfilled')
+      goals.value = goalRes.value.data?.payload || [];
+    if (badgeRes.status === 'fulfilled')
+      badgeDefs.value = badgeRes.value.data?.payload || [];
     lastUpdated.value = new Date().toLocaleTimeString('pt-BR');
-    tick.value++;
   } catch {
     /* ignore */
   }
 }
 
-function formatCurrency(val) {
-  if (!val) return 'R$ 0';
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    maximumFractionDigits: 0,
-  }).format(val);
+function fBRL(val) {
+  if (!val) return '0';
+  return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(
+    val
+  );
 }
 
-function formatDate(ts) {
-  if (!ts) return '';
-  return new Date(ts * 1000).toLocaleTimeString('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function exitTV() {
-  // If opened in a new tab, close it; otherwise go back
-  if (window.opener) {
-    window.close();
-  } else {
-    window.history.back();
-  }
-}
-
-function handleKey(e) {
-  if (e.key === 'Escape') exitTV();
+function initials(name) {
+  if (!name) return '?';
+  return name
+    .split(' ')
+    .slice(0, 2)
+    .map(w => w[0])
+    .join('')
+    .toUpperCase();
 }
 
 onMounted(() => {
   loadData();
-  interval = setInterval(loadData, 30000); // refresh every 30s
-  document.addEventListener('keydown', handleKey);
+  interval = setInterval(loadData, 30000);
 });
 
-onUnmounted(() => {
-  clearInterval(interval);
-  document.removeEventListener('keydown', handleKey);
-});
+onUnmounted(() => clearInterval(interval));
 </script>
 
 <template>
   <div
-    class="fixed inset-0 bg-slate-950 text-white overflow-hidden flex flex-col select-none"
+    class="fixed inset-0 flex flex-col overflow-hidden select-none"
+    style="
+      background: radial-gradient(
+        ellipse at 50% 0%,
+        #3b1068 0%,
+        #1a0533 60%,
+        #0f0220 100%
+      );
+    "
   >
-    <!-- Top bar -->
-    <div
-      class="flex items-center justify-between px-8 py-3 bg-black/30 border-b border-white/10 shrink-0"
-    >
-      <div class="flex items-center gap-3">
-        <span class="text-amber-400 text-2xl">🏆</span>
-        <div>
-          <h1 class="text-xl font-bold tracking-wide">RANKING DA EQUIPE</h1>
-          <p class="text-xs text-slate-400">Chatwoot-Volponi · Kanban CRM</p>
-        </div>
-      </div>
-
-      <!-- Live stats -->
-      <div v-if="overview" class="flex items-center gap-6">
-        <div class="text-center">
-          <p class="text-2xl font-black text-green-400">
-            {{ overview.today.won }}
-          </p>
-          <p class="text-[10px] text-slate-400 uppercase tracking-wide">
-            Ganhos Hoje
-          </p>
-        </div>
-        <div class="text-center">
-          <p class="text-2xl font-black text-amber-400">
-            {{ formatCurrency(overview.month.value) }}
-          </p>
-          <p class="text-[10px] text-slate-400 uppercase tracking-wide">
-            Receita no Mês
-          </p>
-        </div>
-        <div class="text-center">
-          <p class="text-2xl font-black text-woot-400">
-            {{ overview.total.open }}
-          </p>
-          <p class="text-[10px] text-slate-400 uppercase tracking-wide">
-            Leads Abertos
-          </p>
-        </div>
-      </div>
-
-      <div class="flex items-center gap-3">
-        <span class="text-xs text-slate-500"
-          >Atualizado: {{ lastUpdated }}</span
-        >
-        <button
-          class="text-xs px-3 py-1.5 rounded-lg border border-white/20 text-slate-300 hover:bg-white/10 transition-colors"
-          @click="exitTV"
-        >
-          ESC Sair
-        </button>
-      </div>
+    <!-- ── Header ─────────────────────────────────────────────────────────── -->
+    <div class="shrink-0 pt-8 pb-4 text-center">
+      <p class="text-4xl font-black text-amber-400 tracking-wide">
+        🏆 Ranking de Gamificação
+      </p>
+      <p class="text-white/50 text-sm mt-1 capitalize">{{ PERIOD_LABEL }}</p>
     </div>
 
-    <!-- Main content -->
-    <div class="flex-1 flex gap-0 overflow-hidden">
-      <!-- Ranking column -->
+    <!-- ── Podium ─────────────────────────────────────────────────────────── -->
+    <div
+      v-if="podiumItems.length"
+      class="shrink-0 flex items-end justify-center gap-8 px-8 pb-6"
+    >
       <div
-        class="w-[55%] border-r border-white/10 flex flex-col p-6 overflow-hidden"
+        v-for="(entry, dispIdx) in podiumItems"
+        :key="dispIdx"
+        class="flex flex-col items-center"
+        :class="
+          PODIUM_RANKS[dispIdx] === 0 ? 'flex-1 max-w-56' : 'flex-1 max-w-44'
+        "
       >
-        <h2
-          class="text-sm font-semibold text-slate-400 uppercase tracking-widest mb-4"
-        >
-          Ranking de Pontos
-        </h2>
-        <div class="flex flex-col gap-3 overflow-y-auto flex-1">
-          <div
-            v-for="(agent, idx) in rankings"
-            :key="agent.agent.id"
-            class="flex items-center gap-4 rounded-xl px-4 py-3 border transition-all"
-            :class="[
-              idx === 0
-                ? 'bg-amber-500/10 border-amber-500/30'
-                : idx === 1
-                  ? 'bg-slate-400/10 border-slate-400/20'
-                  : idx === 2
-                    ? 'bg-amber-800/10 border-amber-700/20'
-                    : 'bg-white/5 border-white/10',
-            ]"
-          >
-            <!-- Rank -->
-            <div class="w-10 text-center shrink-0">
-              <span v-if="idx < 3" class="text-2xl">{{ MEDALS[idx] }}</span>
-              <span v-else class="text-lg font-black text-slate-400">{{
-                idx + 1
-              }}</span>
-            </div>
+        <template v-if="entry">
+          <!-- spacer for non-gold -->
+          <div v-if="PODIUM_RANKS[dispIdx] !== 0" class="h-8" />
 
-            <!-- Avatar -->
-            <img
-              v-if="agent.agent.avatar_url"
-              :src="agent.agent.avatar_url"
-              class="size-10 rounded-full shrink-0"
-              :class="idx === 0 ? 'ring-2 ring-amber-400' : ''"
-            />
+          <!-- Avatar -->
+          <div class="relative mb-3">
             <div
-              v-else
-              class="size-10 rounded-full bg-slate-700 flex items-center justify-center text-lg shrink-0"
-            >
-              {{ agent.agent.name.charAt(0).toUpperCase() }}
-            </div>
-
-            <!-- Name + badges -->
-            <div class="flex-1 min-w-0">
-              <p
-                class="font-bold truncate"
-                :class="idx === 0 ? 'text-lg text-amber-300' : 'text-white'"
-              >
-                {{ agent.agent.name }}
-              </p>
-              <div class="flex gap-3 mt-0.5">
-                <span class="text-xs text-slate-400">
-                  <span class="text-green-400 font-bold">{{
-                    agent.stats.won
-                  }}</span>
-                  ganhos
-                </span>
-                <span class="text-xs text-slate-400">
-                  {{ agent.stats.conversion_rate }}% conv.
-                </span>
-                <span class="text-xs text-amber-400 font-semibold">
-                  {{ formatCurrency(agent.stats.value) }}
-                </span>
-              </div>
-            </div>
-
-            <!-- Points bar + score -->
-            <div class="shrink-0 flex items-center gap-3">
-              <div class="w-24 h-2 bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  class="h-full rounded-full transition-all duration-700"
-                  :class="idx === 0 ? 'bg-amber-400' : 'bg-woot-500'"
-                  :style="{
-                    width:
-                      (rankings[0]?.points > 0
-                        ? (agent.points / rankings[0].points) * 100
-                        : 0) + '%',
-                  }"
-                />
-              </div>
-              <span
-                class="text-lg font-black w-16 text-right"
-                :class="idx === 0 ? 'text-amber-400' : 'text-slate-200'"
-              >
-                {{ agent.points }}
-              </span>
-              <span class="text-xs text-slate-500">pts</span>
-            </div>
-          </div>
-          <div
-            v-if="!rankings.length"
-            class="text-center py-12 text-slate-600 text-sm"
-          >
-            Sem dados de ranking ainda
-          </div>
-        </div>
-      </div>
-
-      <!-- Right column: Recent wins + stats -->
-      <div class="flex-1 flex flex-col p-6 gap-4 overflow-hidden">
-        <!-- Month stats strip -->
-        <div v-if="overview" class="grid grid-cols-3 gap-3 shrink-0">
-          <div
-            class="bg-green-500/10 border border-green-500/20 rounded-xl p-3 text-center"
-          >
-            <p class="text-2xl font-black text-green-400">
-              {{ overview.month.won }}
-            </p>
-            <p class="text-[10px] text-slate-400 uppercase">Ganhos no Mês</p>
-          </div>
-          <div
-            class="bg-woot-500/10 border border-woot-500/20 rounded-xl p-3 text-center"
-          >
-            <p class="text-2xl font-black text-woot-400">
-              {{ overview.month.new }}
-            </p>
-            <p class="text-[10px] text-slate-400 uppercase">Novos Leads</p>
-          </div>
-          <div
-            class="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-center"
-          >
-            <p class="text-2xl font-black text-red-400">
-              {{ overview.total.lost }}
-            </p>
-            <p class="text-[10px] text-slate-400 uppercase">Perdidos</p>
-          </div>
-        </div>
-
-        <!-- Recent wins -->
-        <div class="flex-1 flex flex-col overflow-hidden">
-          <h2
-            class="text-sm font-semibold text-slate-400 uppercase tracking-widest mb-3 shrink-0"
-          >
-            🏆 Últimas Vitórias
-          </h2>
-          <div class="flex flex-col gap-2 overflow-y-auto flex-1">
-            <div
-              v-for="win in recentWins"
-              :key="win.id"
-              class="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 hover:bg-white/8 transition-colors"
-              :style="{
-                borderLeftColor: win.stage_color,
-                borderLeftWidth: '3px',
-              }"
+              class="rounded-full shadow-2xl"
+              :class="[
+                PODIUM_RANKS[dispIdx] === 0
+                  ? 'size-28 ring-4'
+                  : 'size-20 ring-[3px]',
+                PODIUM_RANKS[dispIdx] === 0
+                  ? 'ring-amber-300'
+                  : PODIUM_RANKS[dispIdx] === 1
+                    ? 'ring-slate-300'
+                    : 'ring-orange-400',
+              ]"
             >
               <img
-                v-if="win.assignee?.avatar_url"
-                :src="win.assignee.avatar_url"
-                class="size-8 rounded-full shrink-0"
+                v-if="entry.agent.avatar_url"
+                :src="entry.agent.avatar_url"
+                class="rounded-full object-cover w-full h-full"
               />
               <div
                 v-else
-                class="size-8 rounded-full bg-green-900/50 flex items-center justify-center text-sm shrink-0"
+                class="rounded-full w-full h-full flex items-center justify-center font-black text-white"
+                :class="[
+                  PODIUM_RANKS[dispIdx] === 0
+                    ? 'text-3xl bg-amber-500'
+                    : PODIUM_RANKS[dispIdx] === 1
+                      ? 'text-2xl bg-slate-500'
+                      : 'text-2xl bg-orange-500',
+                ]"
               >
-                🏆
-              </div>
-
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-semibold text-white truncate">
-                  {{ win.title }}
-                </p>
-                <p class="text-[10px] text-slate-500">
-                  {{ win.assignee?.name || '—' }} · {{ win.pipeline_name }}
-                </p>
-              </div>
-
-              <div class="text-right shrink-0">
-                <p class="text-sm font-bold text-green-400">
-                  {{ formatCurrency(win.value) }}
-                </p>
-                <p class="text-[10px] text-slate-500">
-                  {{ formatDate(win.won_at) }}
-                </p>
+                {{ initials(entry.agent.name) }}
               </div>
             </div>
-            <div
-              v-if="!recentWins.length"
-              class="text-center py-8 text-slate-600 text-sm"
+            <!-- Rank badge -->
+            <span
+              class="absolute -top-1 -right-1 size-8 rounded-full flex items-center justify-center text-sm font-black border-2 border-purple-900 shadow-lg"
+              :class="
+                PODIUM_RANKS[dispIdx] === 0
+                  ? 'bg-amber-400 text-amber-900'
+                  : PODIUM_RANKS[dispIdx] === 1
+                    ? 'bg-slate-400 text-white'
+                    : 'bg-orange-500 text-white'
+              "
+              >{{ PODIUM_RANKS[dispIdx] + 1 }}</span
             >
-              Nenhuma vitória registrada ainda
-            </div>
           </div>
+
+          <!-- Name -->
+          <p
+            class="font-black truncate text-center w-full"
+            :class="
+              PODIUM_RANKS[dispIdx] === 0
+                ? 'text-amber-300 text-xl'
+                : 'text-white text-base'
+            "
+          >
+            {{ entry.agent.name.split(' ')[0] }}
+          </p>
+
+          <!-- Value -->
+          <p
+            class="font-black mt-0.5"
+            :class="
+              PODIUM_RANKS[dispIdx] === 0
+                ? 'text-amber-400 text-2xl'
+                : 'text-white/80 text-lg'
+            "
+          >
+            {{ fBRL(entry.stats.value) }}
+          </p>
+          <p class="text-white/50 text-xs">
+            {{ entry.stats.won }} negócio{{ entry.stats.won !== 1 ? 's' : '' }}
+          </p>
+
+          <!-- Badges -->
+          <div
+            v-if="agentBadges[entry.agent.id]?.length"
+            class="flex gap-0.5 mt-1"
+          >
+            <span
+              v-for="b in agentBadges[entry.agent.id].slice(0, 3)"
+              :key="b.id"
+              class="text-base"
+              >{{ b.icon }}</span
+            >
+          </div>
+        </template>
+        <template v-else>
+          <div class="h-8" />
+          <div
+            class="rounded-full bg-white/10 mb-3"
+            :class="PODIUM_RANKS[dispIdx] === 0 ? 'size-28' : 'size-20'"
+          />
+          <p class="text-white/20 text-sm">—</p>
+        </template>
+      </div>
+    </div>
+
+    <!-- ── Ranking list ────────────────────────────────────────────────────── -->
+    <div class="flex-1 overflow-y-auto px-8 pb-6">
+      <div
+        class="rounded-2xl overflow-hidden"
+        style="
+          background: rgba(255, 255, 255, 0.07);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+        "
+      >
+        <div
+          v-for="(entry, idx) in rankings"
+          :key="entry.agent.id"
+          class="flex items-center gap-4 px-6 py-3.5 border-b last:border-b-0"
+          style="border-color: rgba(255, 255, 255, 0.06)"
+          :class="idx === 0 ? 'bg-amber-400/10' : ''"
+        >
+          <!-- Position -->
+          <span
+            class="w-8 text-center font-black text-xl shrink-0"
+            :class="
+              idx === 0
+                ? 'text-amber-400'
+                : idx === 1
+                  ? 'text-slate-300'
+                  : idx === 2
+                    ? 'text-orange-400'
+                    : 'text-white/40'
+            "
+            >{{ idx + 1 }}</span
+          >
+
+          <!-- Avatar -->
+          <img
+            v-if="entry.agent.avatar_url"
+            :src="entry.agent.avatar_url"
+            class="size-10 rounded-full object-cover shrink-0"
+            :class="idx === 0 ? 'ring-2 ring-amber-400' : ''"
+          />
+          <div
+            v-else
+            class="size-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold shrink-0"
+          >
+            {{ initials(entry.agent.name) }}
+          </div>
+
+          <!-- Name -->
+          <p
+            class="flex-1 font-semibold truncate"
+            :class="
+              idx === 0 ? 'text-amber-300 text-base' : 'text-white text-sm'
+            "
+          >
+            {{ entry.agent.name }}
+          </p>
+
+          <!-- Badges -->
+          <div class="flex gap-0.5 shrink-0">
+            <span
+              v-for="b in (agentBadges[entry.agent.id] || []).slice(0, 3)"
+              :key="b.id"
+              class="text-base"
+              >{{ b.icon }}</span
+            >
+          </div>
+
+          <!-- Stats -->
+          <div class="text-right shrink-0 min-w-28">
+            <p
+              class="font-black"
+              :class="
+                idx === 0 ? 'text-amber-400 text-lg' : 'text-white/90 text-base'
+              "
+            >
+              {{ fBRL(entry.stats.value) }}
+            </p>
+            <p class="text-white/40 text-xs">
+              {{ entry.stats.won }} negócio{{
+                entry.stats.won !== 1 ? 's' : ''
+              }}
+            </p>
+          </div>
+        </div>
+
+        <div v-if="!rankings.length" class="py-12 text-center text-white/30">
+          Nenhum dado disponível
         </div>
       </div>
     </div>
 
-    <!-- Bottom ticker -->
+    <!-- ── KPI footer ─────────────────────────────────────────────────────── -->
     <div
-      class="shrink-0 bg-black/40 border-t border-white/10 px-6 py-2 flex items-center gap-4"
+      class="shrink-0 px-8 pb-8 grid grid-cols-2 gap-4 max-w-xl mx-auto w-full"
     >
-      <span class="text-xs text-slate-500 uppercase tracking-widest shrink-0"
-        >LIVE</span
+      <div
+        class="rounded-2xl p-4 text-center"
+        style="
+          background: rgba(255, 255, 255, 0.07);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+        "
       >
-      <div class="flex items-center gap-1.5 overflow-hidden flex-1">
-        <template v-for="win in recentWins.slice(0, 5)" :key="win.id">
-          <span class="text-xs text-green-400 whitespace-nowrap"
-            >🏆 {{ win.title }}</span
-          >
-          <span class="text-slate-600">·</span>
-          <span class="text-xs text-slate-400 whitespace-nowrap">{{
-            win.assignee?.name
-          }}</span>
-          <span class="text-xs text-amber-400 whitespace-nowrap">{{
-            formatCurrency(win.value)
-          }}</span>
-          <span class="text-slate-700 mx-2">|</span>
-        </template>
+        <p class="text-3xl font-black text-green-400">
+          {{ fBRL(teamTotalValue) }}
+        </p>
+        <p class="text-white/50 text-xs mt-1 uppercase tracking-wide">
+          Valor Total
+        </p>
       </div>
-      <div class="flex items-center gap-1 shrink-0">
-        <span class="size-1.5 rounded-full bg-green-500 animate-pulse" />
-        <span class="text-[10px] text-slate-500"
-          >Ao vivo · atualiza a cada 30s</span
-        >
+      <div
+        class="rounded-2xl p-4 text-center"
+        style="
+          background: rgba(255, 255, 255, 0.07);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+        "
+      >
+        <p class="text-3xl font-black text-amber-400">{{ teamTotalWon }}</p>
+        <p class="text-white/50 text-xs mt-1 uppercase tracking-wide">
+          Negócios Totais
+        </p>
       </div>
+    </div>
+
+    <!-- Live indicator + last updated -->
+    <div
+      class="shrink-0 text-center pb-4 flex items-center justify-center gap-2"
+    >
+      <span class="size-1.5 rounded-full bg-green-400 animate-pulse" />
+      <span class="text-white/30 text-xs"
+        >Ao vivo · atualiza a cada 30s · {{ lastUpdated }}</span
+      >
     </div>
   </div>
 </template>

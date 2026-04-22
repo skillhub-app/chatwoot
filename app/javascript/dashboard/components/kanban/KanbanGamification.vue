@@ -1,12 +1,19 @@
 <script setup>
 import { ref, computed, watch, onMounted, reactive } from 'vue';
 import { useStore } from 'vuex';
+import { useRouter } from 'vue-router';
 import { useAdmin } from 'dashboard/composables/useAdmin';
 import { gamificationAPI, goalsAPI, badgesAPI } from 'dashboard/api/kanban.js';
 
 const store = useStore();
+const router = useRouter();
 const agents = computed(() => store.getters['agents/getAgents'] || []);
 const { isAdmin } = useAdmin();
+
+function openTVMode() {
+  const resolved = router.resolve({ name: 'kanban_tv' });
+  window.open(resolved.href, '_blank');
+}
 
 // ── Period ────────────────────────────────────────────────────────────────────
 const PERIODS = [
@@ -357,33 +364,34 @@ const podiumItems = computed(() => {
 // For each display slot: rank index (0=gold/1st, 1=silver/2nd, 2=bronze/3rd)
 const PODIUM_RANKS = [1, 0, 2];
 
+// MEDAL[0]=ouro/1º  MEDAL[1]=prata/2º  MEDAL[2]=bronze/3º
 const MEDAL = [
   {
-    ring: 'ring-amber-400',
-    bg: 'bg-gradient-to-b from-amber-300 to-amber-500',
-    label: 'bg-amber-500',
-    emoji: '🥇',
-    step: 'h-28',
+    ring: 'ring-amber-300',
+    avatarBg: 'bg-gradient-to-b from-amber-200 to-amber-500',
+    stepBg: 'bg-gradient-to-b from-amber-300 to-amber-500',
+    badge: 'bg-amber-400 text-amber-900',
+    numText: 'text-amber-800/50',
     num: '1',
-    numColor: 'text-amber-600',
+    step: 'h-36',
   },
   {
-    ring: 'ring-slate-400',
-    bg: 'bg-gradient-to-b from-slate-300 to-slate-400',
-    label: 'bg-slate-400',
-    emoji: '🥈',
-    step: 'h-20',
+    ring: 'ring-slate-300',
+    avatarBg: 'bg-gradient-to-b from-slate-200 to-slate-400',
+    stepBg: 'bg-gradient-to-b from-slate-200 to-slate-400',
+    badge: 'bg-slate-400 text-white',
+    numText: 'text-slate-600/50',
     num: '2',
-    numColor: 'text-slate-500',
+    step: 'h-24',
   },
   {
-    ring: 'ring-amber-700',
-    bg: 'bg-gradient-to-b from-amber-600 to-amber-700',
-    label: 'bg-amber-700',
-    emoji: '🥉',
-    step: 'h-14',
+    ring: 'ring-orange-400',
+    avatarBg: 'bg-gradient-to-b from-orange-300 to-orange-600',
+    stepBg: 'bg-gradient-to-b from-orange-400 to-orange-600',
+    badge: 'bg-orange-500 text-white',
+    numText: 'text-orange-900/50',
     num: '3',
-    numColor: 'text-amber-700',
+    step: 'h-16',
   },
 ];
 
@@ -506,6 +514,14 @@ function initials(name) {
           class="i-lucide-loader-circle size-4 animate-spin text-woot-500"
         />
         <button
+          class="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-purple-600 text-white hover:bg-purple-700 font-medium transition-colors"
+          title="Abrir modo TV em nova aba"
+          @click="openTVMode"
+        >
+          <span class="i-lucide-tv size-3.5" />
+          Modo TV
+        </button>
+        <button
           class="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium transition-colors"
           @click="openSettings"
         >
@@ -624,48 +640,46 @@ function initials(name) {
           </div>
         </div>
 
-        <!-- Podium + timeline side-by-side on large screens -->
+        <!-- Podium full-width -->
         <div
           v-if="rankings.length > 0"
-          class="grid grid-cols-1 xl:grid-cols-5 gap-6"
+          class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6"
         >
-          <!-- Podium (3 cols on xl) -->
-          <div
-            class="xl:col-span-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6"
+          <h2
+            class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-6 flex items-center gap-2"
           >
-            <h2
-              class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-6 flex items-center gap-2"
+            <span class="i-lucide-trophy size-3.5 text-amber-500" />
+            Top 3 do Período
+          </h2>
+
+          <!-- Podium: 2nd | 1st | 3rd -->
+          <div class="flex items-end justify-center gap-4 md:gap-8">
+            <div
+              v-for="(entry, dispIdx) in podiumItems"
+              :key="dispIdx"
+              class="flex flex-col items-center"
+              :class="
+                PODIUM_RANKS[dispIdx] === 0
+                  ? 'flex-1 max-w-52'
+                  : 'flex-1 max-w-40'
+              "
             >
-              <span class="i-lucide-trophy size-3.5 text-amber-500" />
-              Top 3 do Período
-            </h2>
+              <template v-if="entry">
+                <!-- Crown for gold -->
+                <span
+                  v-if="PODIUM_RANKS[dispIdx] === 0"
+                  class="text-3xl mb-1 animate-bounce"
+                  >👑</span
+                >
+                <div v-else class="h-10" />
 
-            <div class="flex items-end justify-center gap-2">
-              <div
-                v-for="(entry, dispIdx) in podiumItems"
-                :key="dispIdx"
-                class="flex flex-col items-center"
-                :class="
-                  PODIUM_RANKS[dispIdx] === 0
-                    ? 'flex-1 max-w-48'
-                    : 'flex-1 max-w-36'
-                "
-              >
-                <template v-if="entry">
-                  <!-- Crown for gold -->
-                  <span
-                    v-if="PODIUM_RANKS[dispIdx] === 0"
-                    class="text-3xl mb-1 animate-bounce"
-                    >👑</span
-                  >
-                  <div v-else class="h-9" />
-
-                  <!-- Avatar -->
+                <!-- Avatar with numbered badge -->
+                <div class="relative mb-3 shrink-0">
                   <div
-                    class="relative mb-2 ring-4 rounded-full shadow-lg shrink-0"
+                    class="ring-4 rounded-full shadow-xl"
                     :class="[
                       MEDAL[PODIUM_RANKS[dispIdx]].ring,
-                      PODIUM_RANKS[dispIdx] === 0 ? 'size-20' : 'size-14',
+                      PODIUM_RANKS[dispIdx] === 0 ? 'size-24' : 'size-16',
                     ]"
                   >
                     <img
@@ -678,153 +692,238 @@ function initials(name) {
                       v-else
                       class="rounded-full w-full h-full flex items-center justify-center text-white font-bold"
                       :class="[
-                        MEDAL[PODIUM_RANKS[dispIdx]].bg,
-                        PODIUM_RANKS[dispIdx] === 0 ? 'text-xl' : 'text-base',
+                        MEDAL[PODIUM_RANKS[dispIdx]].avatarBg,
+                        PODIUM_RANKS[dispIdx] === 0 ? 'text-2xl' : 'text-base',
                       ]"
                     >
                       {{ initials(entry.agent.name) }}
                     </div>
                   </div>
+                  <!-- Number badge -->
+                  <span
+                    class="absolute -top-1 -right-1 size-7 rounded-full flex items-center justify-center text-sm font-black shadow-lg border-2 border-white dark:border-slate-800"
+                    :class="MEDAL[PODIUM_RANKS[dispIdx]].badge"
+                    >{{ MEDAL[PODIUM_RANKS[dispIdx]].num }}</span
+                  >
+                </div>
 
-                  <!-- Name + stats -->
-                  <p
-                    class="text-sm font-bold text-slate-800 dark:text-slate-100 truncate text-center w-full px-1"
-                  >
-                    {{ entry.agent.name.split(' ')[0] }}
-                  </p>
-                  <p
-                    class="text-xs font-semibold text-green-600 dark:text-green-400 mt-0.5"
-                  >
-                    {{ fBRL(entry.stats.value) }}
-                  </p>
-                  <p class="text-[10px] text-slate-400">
-                    {{ entry.stats.won }} venda{{
-                      entry.stats.won !== 1 ? 's' : ''
-                    }}
-                  </p>
+                <!-- Name + stats -->
+                <p
+                  class="font-bold text-slate-800 dark:text-slate-100 truncate text-center w-full px-1"
+                  :class="PODIUM_RANKS[dispIdx] === 0 ? 'text-base' : 'text-sm'"
+                >
+                  {{ entry.agent.name.split(' ')[0] }}
+                </p>
+                <p
+                  class="text-sm font-semibold text-green-600 dark:text-green-400 mt-0.5"
+                >
+                  {{ fBRL(entry.stats.value) }}
+                </p>
+                <p class="text-xs text-slate-400">
+                  {{ entry.stats.won }} venda{{
+                    entry.stats.won !== 1 ? 's' : ''
+                  }}
+                </p>
 
-                  <!-- Badges -->
-                  <div
-                    v-if="agentBadges[entry.agent.id]?.length"
-                    class="flex gap-0.5 mt-1 flex-wrap justify-center"
+                <!-- Mini badges -->
+                <div
+                  v-if="agentBadges[entry.agent.id]?.length"
+                  class="flex gap-0.5 mt-1 flex-wrap justify-center"
+                >
+                  <span
+                    v-for="b in agentBadges[entry.agent.id].slice(0, 3)"
+                    :key="b.id"
+                    :title="b.name"
+                    class="text-sm"
+                    >{{ b.icon }}</span
                   >
-                    <span
-                      v-for="b in agentBadges[entry.agent.id].slice(0, 4)"
-                      :key="b.id"
-                      :title="b.name"
-                      class="text-sm"
-                      >{{ b.icon }}</span
-                    >
-                  </div>
+                </div>
 
-                  <!-- Podium step block -->
-                  <div
-                    class="w-full rounded-t-xl mt-3 flex flex-col items-center justify-end pb-2 relative"
-                    :class="[
-                      MEDAL[PODIUM_RANKS[dispIdx]].label,
-                      MEDAL[PODIUM_RANKS[dispIdx]].step,
-                    ]"
+                <!-- Step block with gradient + big number -->
+                <div
+                  class="w-full rounded-t-2xl mt-3 flex items-center justify-center relative overflow-hidden"
+                  :class="[
+                    MEDAL[PODIUM_RANKS[dispIdx]].stepBg,
+                    MEDAL[PODIUM_RANKS[dispIdx]].step,
+                  ]"
+                >
+                  <span
+                    class="text-6xl font-black select-none absolute"
+                    :class="MEDAL[PODIUM_RANKS[dispIdx]].numText"
+                    >{{ MEDAL[PODIUM_RANKS[dispIdx]].num }}º</span
                   >
-                    <span
-                      class="text-4xl font-black text-white/30 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 select-none"
-                      >{{ MEDAL[PODIUM_RANKS[dispIdx]].num }}</span
-                    >
-                    <span class="text-white font-bold text-xs relative z-10"
-                      >{{ entry.points }}pts</span
-                    >
-                  </div>
-                </template>
-                <template v-else>
-                  <div class="h-9" />
-                  <div
-                    class="size-14 rounded-full bg-slate-100 dark:bg-slate-700 mb-2 ring-4 ring-slate-200 dark:ring-slate-600"
-                  />
-                  <p class="text-xs text-slate-300 dark:text-slate-600">—</p>
-                  <div class="h-5" />
-                  <div
-                    class="w-full rounded-t-xl mt-3 bg-slate-100 dark:bg-slate-800 flex items-center justify-center"
-                    :class="PODIUM_RANKS[dispIdx] === 1 ? 'h-20' : 'h-14'"
+                </div>
+              </template>
+              <template v-else>
+                <div class="h-10" />
+                <div
+                  class="size-16 rounded-full bg-slate-100 dark:bg-slate-700 mb-3 ring-4 ring-slate-200 dark:ring-slate-600"
+                />
+                <p class="text-xs text-slate-300 dark:text-slate-600">—</p>
+                <div class="h-6" />
+                <div
+                  class="w-full rounded-t-2xl mt-3 bg-slate-100 dark:bg-slate-800 flex items-center justify-center"
+                  :class="PODIUM_RANKS[dispIdx] === 1 ? 'h-24' : 'h-16'"
+                >
+                  <span
+                    class="text-5xl font-black text-slate-200 dark:text-slate-700 select-none"
+                    >{{ MEDAL[PODIUM_RANKS[dispIdx]].num }}º</span
                   >
-                    <span
-                      class="text-4xl font-black text-slate-200 dark:text-slate-700 select-none"
-                      >{{ MEDAL[PODIUM_RANKS[dispIdx]].num }}</span
-                    >
-                  </div>
-                </template>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <!-- Compact ranking 1–10 -->
+        <div
+          v-if="rankings.length > 0"
+          class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden"
+        >
+          <div
+            class="px-5 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2"
+          >
+            <span class="i-lucide-list-ordered size-3.5 text-slate-400" />
+            <h2
+              class="text-xs font-semibold text-slate-400 uppercase tracking-wide"
+            >
+              Ranking Completo
+            </h2>
+          </div>
+          <div class="divide-y divide-slate-100 dark:divide-slate-700">
+            <div
+              v-for="(entry, idx) in rankings.slice(0, 10)"
+              :key="entry.agent.id"
+              class="flex items-center gap-3 px-5 py-3"
+              :class="idx === 0 ? 'bg-amber-50/40 dark:bg-amber-900/10' : ''"
+            >
+              <span class="w-7 text-center shrink-0">
+                <span v-if="idx < 3" class="text-base">{{
+                  ['🥇', '🥈', '🥉'][idx]
+                }}</span>
+                <span v-else class="text-sm font-bold text-slate-400">{{
+                  idx + 1
+                }}</span>
+              </span>
+              <img
+                v-if="entry.agent.avatar_url"
+                :src="entry.agent.avatar_url"
+                class="size-8 rounded-full object-cover shrink-0"
+              />
+              <div
+                v-else
+                class="size-8 rounded-full bg-woot-100 dark:bg-woot-800 flex items-center justify-center text-[11px] font-bold text-woot-600 shrink-0"
+              >
+                {{ initials(entry.agent.name) }}
+              </div>
+              <div class="flex-1 min-w-0">
+                <p
+                  class="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate"
+                >
+                  {{ entry.agent.name }}
+                </p>
+                <p class="text-[10px] text-slate-400">
+                  {{ entry.stats.won }} vendas ·
+                  {{ entry.stats.conversion_rate }}% conv.
+                </p>
+              </div>
+              <div class="text-right shrink-0">
+                <p class="text-sm font-bold text-green-600 dark:text-green-400">
+                  {{ fBRL(entry.stats.value) }}
+                </p>
+                <p class="text-[10px] font-semibold text-slate-400">
+                  {{ entry.points }} pts
+                </p>
+              </div>
+              <div class="flex gap-0.5 shrink-0 w-16 flex-wrap justify-end">
+                <span
+                  v-for="b in (agentBadges[entry.agent.id] || []).slice(0, 3)"
+                  :key="b.id"
+                  :title="b.name"
+                  class="text-sm"
+                  >{{ b.icon }}</span
+                >
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Recent activity (2 cols on xl) -->
+        <!-- Últimas Ações (abaixo do ranking) -->
+        <div
+          v-if="timelineEvents.length"
+          class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden"
+        >
           <div
-            class="xl:col-span-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 flex flex-col"
+            class="px-5 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2"
           >
+            <span class="i-lucide-activity size-3.5 text-slate-400" />
             <h2
-              class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3 flex items-center gap-2"
+              class="text-xs font-semibold text-slate-400 uppercase tracking-wide"
             >
-              <span class="i-lucide-activity size-3.5" />
               Últimas Ações
             </h2>
-            <div class="space-y-2 flex-1 overflow-y-auto">
-              <div
-                v-for="ev in timelineEvents.slice(0, 10)"
-                :key="ev.id"
-                class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700"
-              >
-                <div v-if="ev.agent" class="shrink-0">
-                  <img
-                    v-if="ev.agent.avatar_url"
-                    :src="ev.agent.avatar_url"
-                    class="size-6 rounded-full object-cover"
-                  />
-                  <div
-                    v-else
-                    class="size-6 rounded-full bg-woot-100 dark:bg-woot-800 flex items-center justify-center text-[9px] font-bold text-woot-600"
-                  >
-                    {{ initials(ev.agent.name) }}
-                  </div>
+          </div>
+          <div
+            class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-0 divide-y md:divide-y-0 divide-slate-100 dark:divide-slate-700"
+          >
+            <div
+              v-for="ev in timelineEvents.slice(0, 9)"
+              :key="ev.id"
+              class="flex items-center gap-2.5 px-4 py-2.5 border-b border-slate-50 dark:border-slate-800"
+            >
+              <div v-if="ev.agent" class="shrink-0">
+                <img
+                  v-if="ev.agent.avatar_url"
+                  :src="ev.agent.avatar_url"
+                  class="size-7 rounded-full object-cover"
+                />
+                <div
+                  v-else
+                  class="size-7 rounded-full bg-woot-100 dark:bg-woot-800 flex items-center justify-center text-[9px] font-bold text-woot-600"
+                >
+                  {{ initials(ev.agent.name) }}
                 </div>
-                <div class="flex-1 min-w-0">
-                  <p
-                    class="text-[11px] text-slate-700 dark:text-slate-200 truncate"
-                  >
-                    <span class="font-semibold">{{
-                      ev.agent?.name?.split(' ')[0] || 'Sistema'
-                    }}</span>
-                    {{
-                      ev.action_type === 'won'
-                        ? ' fechou'
-                        : ev.action_type === 'lost'
-                          ? ' perdeu'
-                          : ' reabriu'
-                    }}
-                    <span class="font-medium"> "{{ ev.item.title }}"</span>
-                  </p>
-                  <p
-                    v-if="ev.item.value"
-                    class="text-[10px] text-green-600 font-semibold"
-                  >
-                    {{ fBRL(ev.item.value) }}
-                  </p>
-                </div>
-                <span class="text-[10px] text-slate-400 shrink-0">{{
-                  fRelative(ev.created_at)
-                }}</span>
-                <span class="shrink-0">{{
-                  ev.action_type === 'won'
-                    ? '🏆'
-                    : ev.action_type === 'lost'
-                      ? '❌'
-                      : '🔄'
-                }}</span>
               </div>
+              <div class="flex-1 min-w-0">
+                <p
+                  class="text-[11px] text-slate-700 dark:text-slate-200 truncate"
+                >
+                  <span class="font-semibold">{{
+                    ev.agent?.name?.split(' ')[0] || 'Sistema'
+                  }}</span>
+                  {{
+                    ev.action_type === 'won'
+                      ? ' fechou'
+                      : ev.action_type === 'lost'
+                        ? ' perdeu'
+                        : ' reabriu'
+                  }}
+                  <span class="font-medium"> "{{ ev.item.title }}"</span>
+                </p>
+                <p
+                  v-if="ev.item.value"
+                  class="text-[10px] text-green-600 font-semibold"
+                >
+                  {{ fBRL(ev.item.value) }}
+                </p>
+              </div>
+              <span class="text-[10px] text-slate-400 shrink-0">{{
+                fRelative(ev.created_at)
+              }}</span>
+              <span class="shrink-0">{{
+                ev.action_type === 'won'
+                  ? '🏆'
+                  : ev.action_type === 'lost'
+                    ? '❌'
+                    : '🔄'
+              }}</span>
             </div>
           </div>
         </div>
 
         <!-- Empty state -->
         <div
-          v-else-if="!loading"
+          v-if="!rankings.length && !loading"
           class="flex flex-col items-center justify-center py-20 text-center"
         >
           <span
