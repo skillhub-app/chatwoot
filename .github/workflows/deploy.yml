@@ -35,28 +35,47 @@ jobs:
             echo "=== Building Docker image ==="
             docker build -f docker/Dockerfile -t volps/chatwoot:latest .
 
-            echo "=== Running migrations ==="
-            RAILS_ID=$(docker ps --filter name=chatwoot_rails --format "{{.ID}}" | head -1)
-            if [ -n "$RAILS_ID" ]; then
-              docker exec "$RAILS_ID" bundle exec rails db:migrate
-            fi
-
             echo "=== Deploying stack (force update to pick up new image) ==="
             docker service update --force --image volps/chatwoot:latest chatwoot_rails
             docker service update --force --image volps/chatwoot:latest chatwoot_sidekiq
 
-            echo "=== Waiting for rails to restart ==="
-            sleep 30
+            echo "=== Waiting for new rails container to be running ==="
+            MIGRATED=0
+            for i in $(seq 1 24); do
+              # Use 'docker service ps' to get the current running task ID
+              TASK_ID=$(docker service ps chatwoot_rails \
+                --filter desired-state=running \
+                --format "{{.ID}}" 2>/dev/null | head -1)
 
-            echo "=== Running migrations on new container ==="
-            for i in $(seq 1 8); do
-              RAILS_ID=$(docker ps --filter name=chatwoot_rails --format "{{.ID}}" | head -1)
-              if [ -n "$RAILS_ID" ]; then
-                docker exec "$RAILS_ID" bundle exec rails db:migrate && break
+              if [ -n "$TASK_ID" ]; then
+                # Get the container ID from the task
+                CONTAINER_ID=$(docker inspect "$TASK_ID" \
+                  --format '{{.Status.ContainerStatus.ContainerID}}' 2>/dev/null | head -c 12)
+
+                if [ -n "$CONTAINER_ID" ] && [ "${#CONTAINER_ID}" -ge "10" ]; then
+                  echo "Container found: $CONTAINER_ID (attempt ${i})"
+                  if docker exec "$CONTAINER_ID" bundle exec rails db:migrate 2>&1; then
+                    MIGRATED=1
+                    break
+                  fi
+                fi
               fi
-              echo "Waiting for container... (${i}/8)"
+
+              echo "Waiting for container to be ready... (${i}/24)"
               sleep 10
             done
+
+            if [ "$MIGRATED" -eq "0" ]; then
+              echo "WARNING: Could not run migrations via service task. Trying docker ps fallback..."
+              for i in $(seq 1 5); do
+                RAILS_ID=$(docker ps --filter name=chatwoot_rails --filter status=running \
+                  --format "{{.ID}}" | head -1)
+                if [ -n "$RAILS_ID" ]; then
+                  docker exec "$RAILS_ID" bundle exec rails db:migrate && break
+                fi
+                sleep 10
+              done
+            fi
 
             echo "=== Cleaning old images ==="
             docker image prune -f

@@ -63,6 +63,7 @@ class Account < ApplicationRecord
   has_many :automation_rules, dependent: :destroy_async
   has_many :kanban_pipelines, dependent: :destroy
   has_many :kanban_items, dependent: :destroy
+  has_many :kanban_lost_reasons, class_name: 'KanbanLostReason', dependent: :destroy
   has_many :kanban_webhooks, dependent: :destroy
   has_many :macros, dependent: :destroy_async
   has_many :campaigns, dependent: :destroy_async

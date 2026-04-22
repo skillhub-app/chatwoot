@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_04_17_220000) do
+ActiveRecord::Schema[7.1].define(version: 2026_04_22_000004) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -1008,15 +1008,30 @@ ActiveRecord::Schema[7.1].define(version: 2026_04_17_220000) do
     t.date "expected_close_date"
     t.integer "score", default: 0
     t.jsonb "tags", default: [], null: false
+    t.bigint "contact_id"
+    t.bigint "lost_reason_id"
     t.index ["account_id", "pipeline_id"], name: "index_kanban_items_on_account_id_and_pipeline_id"
     t.index ["account_id"], name: "index_kanban_items_on_account_id"
     t.index ["assignee_id"], name: "index_kanban_items_on_assignee_id"
+    t.index ["contact_id"], name: "index_kanban_items_on_contact_id"
     t.index ["conversation_id"], name: "index_kanban_items_on_conversation_id"
+    t.index ["lost_reason_id"], name: "index_kanban_items_on_lost_reason_id"
     t.index ["pipeline_id"], name: "index_kanban_items_on_pipeline_id"
     t.index ["source"], name: "index_kanban_items_on_source"
     t.index ["stage_id", "position"], name: "index_kanban_items_on_stage_id_and_position"
     t.index ["stage_id"], name: "index_kanban_items_on_stage_id"
     t.index ["temperature"], name: "index_kanban_items_on_temperature"
+  end
+
+  create_table "kanban_lost_reasons", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.string "name", null: false
+    t.boolean "active", default: true, null: false
+    t.integer "position", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "active"], name: "index_kanban_lost_reasons_on_account_id_and_active"
+    t.index ["account_id"], name: "index_kanban_lost_reasons_on_account_id"
   end
 
   create_table "kanban_notes", force: :cascade do |t|
@@ -1040,6 +1055,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_04_17_220000) do
     t.boolean "is_active", default: true, null: false
     t.string "visibility_type", default: "all", null: false
     t.jsonb "visible_to_user_ids", default: []
+    t.jsonb "settings", default: {}, null: false
     t.index ["account_id", "position"], name: "index_kanban_pipelines_on_account_id_and_position"
     t.index ["account_id"], name: "index_kanban_pipelines_on_account_id"
   end
@@ -1069,6 +1085,11 @@ ActiveRecord::Schema[7.1].define(version: 2026_04_17_220000) do
     t.datetime "updated_at", null: false
     t.text "description"
     t.datetime "due_at"
+    t.date "start_date"
+    t.boolean "is_recurring", default: false, null: false
+    t.string "recurrence_frequency"
+    t.integer "recurrence_interval", default: 1
+    t.date "recurrence_end_date"
     t.index ["assignee_id"], name: "index_kanban_tasks_on_assignee_id"
     t.index ["kanban_item_id", "completed_at"], name: "index_kanban_tasks_on_kanban_item_id_and_completed_at"
     t.index ["kanban_item_id"], name: "index_kanban_tasks_on_kanban_item_id"
