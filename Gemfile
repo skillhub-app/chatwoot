@@ -207,6 +207,10 @@ gem 'opentelemetry-exporter-otlp'
 
 gem 'shopify_api'
 
+# Excel export/import for Kanban
+gem 'caxlsx', '~> 3.4'
+gem 'roo', '~> 2.10'
+
 ### Gems required only in specific deployment environments ###
 ##############################################################
 

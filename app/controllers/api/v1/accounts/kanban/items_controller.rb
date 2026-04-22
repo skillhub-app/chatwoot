@@ -206,7 +206,8 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
     params.permit(
       :stage_id, :conversation_id, :contact_phone, :contact_id, :title, :value,
       :assignee_id, :position, :source, :temperature, :probability,
-      :expected_close_date, :score,
+      :expected_close_date, :score, :lost_reason_id,
+      :cpf, :gender, :birth_date, :address,
       tags: []
     )
   end

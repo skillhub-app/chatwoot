@@ -137,7 +137,10 @@ Rails.application.routes.draw do
                   patch :transfer
                 end
                 resources :tasks, only: [:index, :create, :update, :destroy] do
-                  patch :complete, on: :member
+                  member do
+                    patch :complete
+                    patch :reopen
+                  end
                 end
                 resources :notes, only: [:index, :create, :destroy]
                 resources :activities, only: [:index]
@@ -145,6 +148,20 @@ Rails.application.routes.draw do
               end
             end
             resources :webhooks, only: [:index, :show, :create, :update, :destroy]
+
+            # Export endpoints
+            scope :export, controller: 'exports' do
+              get :items
+              get :tasks
+              get :pipelines
+              get :full
+            end
+
+            # Import endpoints
+            scope :import, controller: 'imports' do
+              post :items
+              get  :template
+            end
           end
           resources :canned_responses, only: [:index, :create, :update, :destroy]
           resources :automation_rules, only: [:index, :create, :show, :update, :destroy] do

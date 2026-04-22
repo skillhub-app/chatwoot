@@ -1,6 +1,6 @@
 class Api::V1::Accounts::Kanban::TasksController < Api::V1::Accounts::BaseController
   before_action :fetch_item
-  before_action :fetch_task, only: [:update, :destroy, :complete]
+  before_action :fetch_task, only: [:update, :destroy, :complete, :reopen]
 
   def index
     @tasks = @item.kanban_tasks.ordered
@@ -22,8 +22,13 @@ class Api::V1::Accounts::Kanban::TasksController < Api::V1::Accounts::BaseContro
   end
 
   def complete
-    @task.update!(completed_at: @task.completed? ? nil : Time.current)
-    log_activity('task_completed', title: @task.title, description: "Tarefa concluída: #{@task.title}") if @task.completed?
+    @task.update!(completed_at: Time.current)
+    log_activity('task_completed', title: @task.title, description: "Tarefa concluída: #{@task.title}")
+  end
+
+  def reopen
+    @task.update!(completed_at: nil)
+    log_activity('task_created', title: @task.title, description: "Tarefa reaberta: #{@task.title}")
   end
 
   private

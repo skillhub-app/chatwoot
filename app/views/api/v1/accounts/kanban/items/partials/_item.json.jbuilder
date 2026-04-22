@@ -17,6 +17,10 @@ json.won_at item.won_at&.to_i
 json.lost_at item.lost_at&.to_i
 json.status item.status
 json.contact_id item.contact_id
+json.cpf item.cpf
+json.gender item.gender
+json.birth_date item.birth_date
+json.address item.address
 
 json.tasks_count item.kanban_tasks.size
 json.pending_tasks_count item.kanban_tasks.pending.size

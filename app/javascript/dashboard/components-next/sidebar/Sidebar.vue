@@ -749,6 +749,13 @@ const menuItems = computed(() => {
           icon: 'i-lucide-credit-card',
           to: accountScopedRoute('billing_settings_index'),
         },
+        {
+          name: 'Kanban API',
+          label: 'API do Kanban',
+          icon: 'i-lucide-code-2',
+          to: accountScopedRoute('kanban_api_docs'),
+          activeOn: ['kanban_api_docs'],
+        },
       ],
     },
   ];
