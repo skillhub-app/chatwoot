@@ -16,6 +16,7 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
     @items = @items.where('expected_close_date <= ?', params[:close_date_to]) if params[:close_date_to].present?
     @items = @items.where('value >= ?', params[:value_min]) if params[:value_min].present?
     @items = @items.where('value <= ?', params[:value_max]) if params[:value_max].present?
+    @items = @items.where(lost_reason_id: params[:lost_reason_id]) if params[:lost_reason_id].present?
     if params[:status].present?
       @items = case params[:status]
                when 'won' then @items.won

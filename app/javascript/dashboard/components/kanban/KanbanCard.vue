@@ -93,6 +93,16 @@ const hasAttachments = computed(() => props.item.attachments_count > 0);
           </span>
         </div>
 
+        <!-- Lost reason badge -->
+        <div v-if="item.lost_reason" class="mb-1.5">
+          <span
+            class="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800"
+          >
+            <span class="i-lucide-tag size-2.5" />
+            {{ item.lost_reason.name }}
+          </span>
+        </div>
+
         <!-- Source + Temperature -->
         <div
           v-if="sourceIcon || tempCfg"

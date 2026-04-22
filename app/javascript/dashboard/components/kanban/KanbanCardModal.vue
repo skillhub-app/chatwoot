@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, reactive } from 'vue';
 import { useStore } from 'vuex';
 import { useAccount } from 'dashboard/composables/useAccount';
+import ContactsAPI from 'dashboard/api/contacts.js';
 /* global axios */
 
 const props = defineProps({
@@ -213,8 +214,15 @@ const statusLoading = ref(false);
 const statusError = ref('');
 const showLostPicker = ref(false);
 const selectedLostReasonId = ref(null);
+const showWonConfirm = ref(false);
+const showReopenConfirm = ref(false);
 
-async function markWon() {
+function markWon() {
+  showWonConfirm.value = true;
+}
+
+async function confirmMarkWon() {
+  showWonConfirm.value = false;
   statusLoading.value = true;
   statusError.value = '';
   try {
@@ -222,14 +230,10 @@ async function markWon() {
       pipelineId: props.pipelineId,
       id: props.item.id,
     });
-    // Reload activities to show the "won" and "moved" entries
     store.dispatch('kanban/fetchActivities', {
       pipelineId: props.pipelineId,
       itemId: props.item.id,
     });
-    // If the backend moved the card to a won stage the board updates via the
-    // store. If no won stage is configured, warn the user instead of silently
-    // doing nothing.
     const allStages = store.getters['kanban/getStages'];
     const wonStage = allStages.find(s => s.is_won);
     if (!wonStage) {
@@ -288,7 +292,12 @@ async function confirmMarkLost() {
   }
 }
 
-async function reopenItem() {
+function reopenItem() {
+  showReopenConfirm.value = true;
+}
+
+async function confirmReopen() {
+  showReopenConfirm.value = false;
   await store.dispatch('kanban/reopenItem', {
     pipelineId: props.pipelineId,
     id: props.item.id,
@@ -849,6 +858,127 @@ async function unlinkContact() {
   });
   linkedContact.value = null;
 }
+
+// ─── Edit Lead modal ─────────────────────────────────────────────────────────
+const showEditModal = ref(false);
+const editLead = reactive({
+  title: '',
+  phone: '',
+  cpf: '',
+  gender: '',
+  birthdate: '',
+  zipCode: '',
+  street: '',
+  streetNumber: '',
+  addressComplement: '',
+  neighborhood: '',
+  city: '',
+  state: '',
+  assigneeId: '',
+  notes: '',
+});
+const editCepLoading = ref(false);
+const editSaving = ref(false);
+
+function openEditModal() {
+  const c = linkedContact.value;
+  const a = c?.additional_attributes || {};
+  editLead.title = props.item.title || '';
+  editLead.phone = props.item.contact_phone || c?.phone_number || '';
+  editLead.cpf = a.cpf || '';
+  editLead.gender = a.gender || '';
+  editLead.birthdate = a.birthdate || '';
+  editLead.zipCode = a.zip_code || '';
+  editLead.street = a.street || '';
+  editLead.streetNumber = a.street_number || '';
+  editLead.addressComplement = a.address_complement || '';
+  editLead.neighborhood = a.neighborhood || '';
+  editLead.city = a.city || '';
+  editLead.state = a.state || '';
+  editLead.assigneeId = props.item.assignee?.id || '';
+  editLead.notes = '';
+  showEditModal.value = true;
+}
+
+async function lookupEditCep() {
+  const clean = editLead.zipCode.replace(/\D/g, '');
+  if (clean.length !== 8) return;
+  editCepLoading.value = true;
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+    const json = await res.json();
+    if (!json.erro) {
+      editLead.street = json.logradouro || editLead.street;
+      editLead.neighborhood = json.bairro || editLead.neighborhood;
+      editLead.city = json.localidade || editLead.city;
+      editLead.state = json.uf || editLead.state;
+    }
+  } catch {
+    /* ignore */
+  } finally {
+    editCepLoading.value = false;
+  }
+}
+
+async function saveEditLead() {
+  editSaving.value = true;
+  try {
+    await store.dispatch('kanban/updateItem', {
+      pipelineId: props.pipelineId,
+      id: props.item.id,
+      title: editLead.title.trim() || undefined,
+      contact_phone: editLead.phone.trim() || undefined,
+      assignee_id: editLead.assigneeId || null,
+    });
+
+    if (linkedContact.value?.id) {
+      const additionalAttributes = {};
+      if (editLead.cpf !== undefined) additionalAttributes.cpf = editLead.cpf;
+      if (editLead.gender !== undefined)
+        additionalAttributes.gender = editLead.gender;
+      if (editLead.birthdate !== undefined)
+        additionalAttributes.birthdate = editLead.birthdate;
+      if (editLead.zipCode !== undefined)
+        additionalAttributes.zip_code = editLead.zipCode;
+      if (editLead.street !== undefined)
+        additionalAttributes.street = editLead.street;
+      if (editLead.streetNumber !== undefined)
+        additionalAttributes.street_number = editLead.streetNumber;
+      if (editLead.addressComplement !== undefined)
+        additionalAttributes.address_complement = editLead.addressComplement;
+      if (editLead.neighborhood !== undefined)
+        additionalAttributes.neighborhood = editLead.neighborhood;
+      if (editLead.city !== undefined)
+        additionalAttributes.city = editLead.city;
+      if (editLead.state !== undefined)
+        additionalAttributes.state = editLead.state;
+
+      await ContactsAPI.update(linkedContact.value.id, {
+        name: editLead.title.trim() || linkedContact.value.name,
+        phone_number: editLead.phone.trim() || undefined,
+        additional_attributes: additionalAttributes,
+      });
+    }
+
+    if (editLead.notes.trim()) {
+      await store.dispatch('kanban/createNote', {
+        pipelineId: props.pipelineId,
+        itemId: props.item.id,
+        content: editLead.notes.trim(),
+      });
+    }
+
+    showEditModal.value = false;
+    store.dispatch('kanban/fetchActivities', {
+      pipelineId: props.pipelineId,
+      itemId: props.item.id,
+    });
+  } catch {
+    /* ignore */
+  } finally {
+    editSaving.value = false;
+  }
+}
 </script>
 
 <template>
@@ -1221,6 +1351,12 @@ async function unlinkContact() {
           </div>
 
           <div class="flex flex-col gap-1.5 pt-1">
+            <button
+              class="w-full flex items-center justify-center gap-2 text-xs px-3 py-2 rounded-lg bg-woot-50 dark:bg-woot-900/20 text-woot-600 dark:text-woot-400 hover:bg-woot-100 dark:hover:bg-woot-900/40 font-medium transition-colors border border-woot-200 dark:border-woot-700"
+              @click="openEditModal"
+            >
+              <span class="i-lucide-pencil size-3.5" /> Editar Lead
+            </button>
             <p
               v-if="statusError"
               class="text-[10px] text-red-600 bg-red-50 rounded-lg px-2 py-1.5 leading-snug"
@@ -2246,6 +2382,362 @@ async function unlinkContact() {
                 class="i-lucide-loader-2 size-3 animate-spin"
               />
               Confirmar Perda
+            </button>
+          </div>
+        </div>
+      </div>
+      <!-- ── Won confirmation overlay ─────────────────────────────────────── -->
+      <div
+        v-if="showWonConfirm"
+        class="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-2xl"
+        @click.self="showWonConfirm = false"
+      >
+        <div
+          class="bg-white dark:bg-slate-800 rounded-xl shadow-xl p-5 w-80 space-y-4"
+        >
+          <div class="flex items-center gap-2.5">
+            <span class="i-lucide-trophy size-5 text-green-500 shrink-0" />
+            <h3
+              class="text-sm font-semibold text-slate-800 dark:text-slate-100"
+            >
+              Marcar como Ganho
+            </h3>
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400">
+            Confirmar que
+            <span class="font-semibold text-slate-700 dark:text-slate-200">{{
+              item.title
+            }}</span>
+            foi <span class="text-green-600 font-semibold">GANHO</span>? Esta
+            ação será registrada nas atividades.
+          </p>
+          <div class="flex gap-2">
+            <button
+              class="flex-1 px-3 py-2 text-xs rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 font-medium"
+              @click="showWonConfirm = false"
+            >
+              Cancelar
+            </button>
+            <button
+              :disabled="statusLoading"
+              class="flex-1 px-3 py-2 text-xs rounded-lg bg-green-500 text-white hover:bg-green-600 font-medium disabled:opacity-50 flex items-center justify-center gap-1.5"
+              @click="confirmMarkWon"
+            >
+              <span
+                v-if="statusLoading"
+                class="i-lucide-loader-2 size-3 animate-spin"
+              />
+              Confirmar Ganho
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Reopen confirmation overlay ───────────────────────────────────── -->
+      <div
+        v-if="showReopenConfirm"
+        class="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-2xl"
+        @click.self="showReopenConfirm = false"
+      >
+        <div
+          class="bg-white dark:bg-slate-800 rounded-xl shadow-xl p-5 w-80 space-y-4"
+        >
+          <div class="flex items-center gap-2.5">
+            <span class="i-lucide-rotate-ccw size-5 text-blue-500 shrink-0" />
+            <h3
+              class="text-sm font-semibold text-slate-800 dark:text-slate-100"
+            >
+              Reabrir Lead
+            </h3>
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400">
+            Reabrir
+            <span class="font-semibold text-slate-700 dark:text-slate-200">{{
+              item.title
+            }}</span>
+            e mover de volta para o funil ativo?
+          </p>
+          <div class="flex gap-2">
+            <button
+              class="flex-1 px-3 py-2 text-xs rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 font-medium"
+              @click="showReopenConfirm = false"
+            >
+              Cancelar
+            </button>
+            <button
+              class="flex-1 px-3 py-2 text-xs rounded-lg bg-blue-500 text-white hover:bg-blue-600 font-medium flex items-center justify-center gap-1.5"
+              @click="confirmReopen"
+            >
+              Confirmar Reabertura
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Edit Lead modal overlay ────────────────────────────────────────── -->
+      <div
+        v-if="showEditModal"
+        class="absolute inset-0 z-10 flex items-center justify-center bg-black/50 rounded-2xl"
+        @click.self="showEditModal = false"
+      >
+        <div
+          class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-lg mx-4 flex flex-col max-h-[85vh]"
+        >
+          <div
+            class="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-700 shrink-0"
+          >
+            <h3
+              class="text-sm font-semibold text-slate-800 dark:text-slate-100"
+            >
+              Editar Lead
+            </h3>
+            <button
+              class="text-slate-400 hover:text-slate-600"
+              @click="showEditModal = false"
+            >
+              <span class="i-lucide-x size-4" />
+            </button>
+          </div>
+
+          <div class="overflow-y-auto flex-1 px-5 py-4 space-y-5">
+            <!-- Dados básicos -->
+            <div>
+              <p
+                class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2"
+              >
+                Dados básicos
+              </p>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="col-span-2">
+                  <label
+                    class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                    >Nome *</label
+                  >
+                  <input
+                    v-model="editLead.title"
+                    type="text"
+                    class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                    >Telefone</label
+                  >
+                  <input
+                    v-model="editLead.phone"
+                    type="text"
+                    placeholder="+55 (11) 99999-9999"
+                    class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                    >CPF</label
+                  >
+                  <input
+                    v-model="editLead.cpf"
+                    type="text"
+                    placeholder="000.000.000-00"
+                    class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Dados pessoais -->
+            <div>
+              <p
+                class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2"
+              >
+                Dados pessoais
+              </p>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label
+                    class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                    >Sexo</label
+                  >
+                  <select
+                    v-model="editLead.gender"
+                    class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                  >
+                    <option value="">Selecionar</option>
+                    <option value="male">Masculino</option>
+                    <option value="female">Feminino</option>
+                    <option value="other">Outro</option>
+                  </select>
+                </div>
+                <div>
+                  <label
+                    class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                    >Data de Nascimento</label
+                  >
+                  <input
+                    v-model="editLead.birthdate"
+                    type="date"
+                    class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Endereço -->
+            <div>
+              <p
+                class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2"
+              >
+                Endereço
+              </p>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label
+                    class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                    >CEP</label
+                  >
+                  <div class="relative">
+                    <input
+                      v-model="editLead.zipCode"
+                      type="text"
+                      placeholder="00000-000"
+                      class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                      @blur="lookupEditCep"
+                    />
+                    <span
+                      v-if="editCepLoading"
+                      class="absolute right-2.5 top-1/2 -translate-y-1/2 i-lucide-loader-circle size-3.5 animate-spin text-woot-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label
+                    class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                    >Logradouro</label
+                  >
+                  <input
+                    v-model="editLead.street"
+                    type="text"
+                    class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                    >Número</label
+                  >
+                  <input
+                    v-model="editLead.streetNumber"
+                    type="text"
+                    class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                    >Complemento</label
+                  >
+                  <input
+                    v-model="editLead.addressComplement"
+                    type="text"
+                    class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                    >Bairro</label
+                  >
+                  <input
+                    v-model="editLead.neighborhood"
+                    type="text"
+                    class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                    >Cidade</label
+                  >
+                  <input
+                    v-model="editLead.city"
+                    type="text"
+                    class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                    >Estado</label
+                  >
+                  <input
+                    v-model="editLead.state"
+                    type="text"
+                    maxlength="2"
+                    class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- CRM -->
+            <div>
+              <p
+                class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2"
+              >
+                CRM
+              </p>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label
+                    class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                    >Responsável</label
+                  >
+                  <select
+                    v-model="editLead.assigneeId"
+                    class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500"
+                  >
+                    <option value="">Nenhum</option>
+                    <option
+                      v-for="agent in agents"
+                      :key="agent.id"
+                      :value="agent.id"
+                    >
+                      {{ agent.name }}
+                    </option>
+                  </select>
+                </div>
+                <div class="col-span-2">
+                  <label
+                    class="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1"
+                    >Nova observação</label
+                  >
+                  <textarea
+                    v-model="editLead.notes"
+                    rows="3"
+                    placeholder="Adicionar anotação..."
+                    class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-500 resize-none"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            class="px-5 py-3 bg-slate-50 dark:bg-slate-900 flex justify-end gap-2 rounded-b-xl border-t border-slate-100 dark:border-slate-700 shrink-0"
+          >
+            <button
+              class="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-medium transition-colors"
+              @click="showEditModal = false"
+            >
+              Cancelar
+            </button>
+            <button
+              :disabled="editSaving"
+              class="text-xs px-3 py-1.5 rounded-lg bg-woot-500 text-white hover:bg-woot-600 font-medium transition-colors disabled:opacity-50"
+              @click="saveEditLead"
+            >
+              {{ editSaving ? 'Salvando...' : 'Salvar alterações' }}
             </button>
           </div>
         </div>

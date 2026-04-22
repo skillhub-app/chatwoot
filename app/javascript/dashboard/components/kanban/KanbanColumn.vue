@@ -9,7 +9,12 @@ const props = defineProps({
   pipelineId: { type: Number, required: true },
 });
 
-const emit = defineEmits(['card-click', 'add-card']);
+const emit = defineEmits([
+  'card-click',
+  'add-card',
+  'pendingLost',
+  'pendingWon',
+]);
 const store = useStore();
 
 // ── Local items ref (required — vuedraggable can't mutate Vuex computed) ──
@@ -86,6 +91,16 @@ function onChange(event) {
   if (!event.added) return;
   const { element, newIndex } = event.added;
 
+  if (props.stage.is_lost) {
+    emit('pendingLost', { item: element, stageId: props.stage.id, newIndex });
+    return;
+  }
+
+  if (props.stage.is_won) {
+    emit('pendingWon', { item: element, stageId: props.stage.id, newIndex });
+    return;
+  }
+
   store
     .dispatch('kanban/moveItem', {
       pipelineId: props.pipelineId,
@@ -93,10 +108,7 @@ function onChange(event) {
       stageId: props.stage.id,
       position: newIndex,
     })
-    .catch(() => {
-      // moveItem rolled back the optimistic update in the store;
-      // watcher will sync items.value automatically.
-    });
+    .catch(() => {});
 }
 </script>
 

@@ -53,6 +53,12 @@ const filterCloseDateFrom = ref('');
 const filterCloseDateTo = ref('');
 const filterValueMin = ref('');
 const filterValueMax = ref('');
+const filterLostReason = ref('');
+
+// Pending drag confirmations
+const pendingLostDrag = ref(null);
+const pendingLostReasonId = ref(null);
+const pendingWonDrag = ref(null);
 
 // Store
 const pipelines = computed(() => store.getters['kanban/getPipelines']);
@@ -66,6 +72,9 @@ const stages = computed(() => store.getters['kanban/getStages']);
 const allItems = computed(() => store.getters['kanban/getItems']);
 const uiFlags = computed(() => store.getters['kanban/getUIFlags']);
 const agents = computed(() => store.getters['agents/getAgents'] || []);
+const lostReasons = computed(
+  () => store.getters['kanban/getLostReasons'] || []
+);
 const isLoading = computed(
   () =>
     uiFlags.value.isFetchingPipelines ||
@@ -107,6 +116,7 @@ const activeFiltersCount = computed(() => {
   if (filterCloseDateTo.value) count++;
   if (filterValueMin.value) count++;
   if (filterValueMax.value) count++;
+  if (filterLostReason.value) count++;
   return count;
 });
 
@@ -123,6 +133,7 @@ async function loadBoard(pipelineId) {
   if (filterCloseDateTo.value) filters.close_date_to = filterCloseDateTo.value;
   if (filterValueMin.value) filters.value_min = filterValueMin.value;
   if (filterValueMax.value) filters.value_max = filterValueMax.value;
+  if (filterLostReason.value) filters.lost_reason_id = filterLostReason.value;
   await Promise.all([
     store.dispatch('kanban/fetchStages', pipelineId),
     store.dispatch('kanban/fetchItems', { pipelineId, filters }),
@@ -144,6 +155,7 @@ watch(
     filterCloseDateTo,
     filterValueMin,
     filterValueMax,
+    filterLostReason,
   ],
   () => {
     if (activePipelineId.value) loadBoard(activePipelineId.value);
@@ -346,6 +358,65 @@ function clearFilters() {
   filterCloseDateTo.value = '';
   filterValueMin.value = '';
   filterValueMax.value = '';
+  filterLostReason.value = '';
+}
+
+async function onShowFilters() {
+  showFilters.value = !showFilters.value;
+  if (showFilters.value && !lostReasons.value.length) {
+    await store.dispatch('kanban/fetchLostReasons');
+  }
+}
+
+async function handlePendingLost(payload) {
+  pendingLostReasonId.value = null;
+  pendingLostDrag.value = payload;
+  await store.dispatch('kanban/fetchLostReasons');
+}
+
+function cancelPendingLost() {
+  pendingLostDrag.value = null;
+  pendingLostReasonId.value = null;
+}
+
+async function confirmPendingLost() {
+  if (!pendingLostDrag.value) return;
+  const { item } = pendingLostDrag.value;
+  try {
+    await store.dispatch('kanban/markItemLost', {
+      pipelineId: activePipelineId.value,
+      id: item.id,
+      lostReasonId: pendingLostReasonId.value || undefined,
+    });
+  } catch (e) {
+    /* ignore */
+  } finally {
+    pendingLostDrag.value = null;
+    pendingLostReasonId.value = null;
+  }
+}
+
+function handlePendingWon(payload) {
+  pendingWonDrag.value = payload;
+}
+
+function cancelPendingWon() {
+  pendingWonDrag.value = null;
+}
+
+async function confirmPendingWon() {
+  if (!pendingWonDrag.value) return;
+  const { item } = pendingWonDrag.value;
+  try {
+    await store.dispatch('kanban/markItemWon', {
+      pipelineId: activePipelineId.value,
+      id: item.id,
+    });
+  } catch (e) {
+    /* ignore */
+  } finally {
+    pendingWonDrag.value = null;
+  }
 }
 </script>
 
@@ -422,7 +493,7 @@ function clearFilters() {
             ? 'border-woot-400 bg-woot-50 dark:bg-woot-900/30 text-woot-600'
             : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
         "
-        @click="showFilters = !showFilters"
+        @click="onShowFilters"
       >
         <span class="i-lucide-filter size-3.5" />
         Filtros
@@ -514,6 +585,16 @@ function clearFilters() {
           <option value="open">Aberto</option>
           <option value="won">Ganho</option>
           <option value="lost">Perdido</option>
+        </select>
+
+        <select
+          v-model="filterLostReason"
+          class="text-xs border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-woot-500"
+        >
+          <option value="">Motivo perda: todos</option>
+          <option v-for="r in lostReasons" :key="r.id" :value="r.id">
+            {{ r.name }}
+          </option>
         </select>
 
         <div class="flex gap-1.5">
@@ -634,6 +715,8 @@ function clearFilters() {
           :pipeline-id="activePipelineId"
           @card-click="selectedItem = $event"
           @add-card="openAddCard"
+          @pending-lost="handlePendingLost"
+          @pending-won="handlePendingWon"
         />
       </div>
 
@@ -704,6 +787,104 @@ function clearFilters() {
       @close="showPipelineModal = false"
       @saved="showPipelineModal = false"
     />
+
+    <!-- Lost reason picker dialog -->
+    <div
+      v-if="pendingLostDrag"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      @click.self="cancelPendingLost"
+    >
+      <div
+        class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm mx-4 overflow-hidden"
+      >
+        <div
+          class="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100 dark:border-slate-700"
+        >
+          <span class="i-lucide-x-circle size-5 text-red-500 shrink-0" />
+          <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            Marcar como Perdido
+          </h3>
+        </div>
+        <div class="px-5 py-4 space-y-3">
+          <p class="text-xs text-slate-500 dark:text-slate-400">
+            <span class="font-semibold text-slate-700 dark:text-slate-200">{{
+              pendingLostDrag.item?.title
+            }}</span>
+            será marcado como perdido. Selecione o motivo:
+          </p>
+          <select
+            v-model="pendingLostReasonId"
+            class="w-full text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-400"
+          >
+            <option :value="null">— Sem motivo —</option>
+            <option v-for="r in lostReasons" :key="r.id" :value="r.id">
+              {{ r.name }}
+            </option>
+          </select>
+        </div>
+        <div
+          class="px-5 py-3 bg-slate-50 dark:bg-slate-900 flex justify-end gap-2 rounded-b-xl border-t border-slate-100 dark:border-slate-700"
+        >
+          <button
+            class="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-medium transition-colors"
+            @click="cancelPendingLost"
+          >
+            Cancelar
+          </button>
+          <button
+            class="text-xs px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 font-medium transition-colors"
+            @click="confirmPendingLost"
+          >
+            Confirmar Perdido
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Won confirmation dialog -->
+    <div
+      v-if="pendingWonDrag"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      @click.self="cancelPendingWon"
+    >
+      <div
+        class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm mx-4 overflow-hidden"
+      >
+        <div
+          class="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100 dark:border-slate-700"
+        >
+          <span class="i-lucide-trophy size-5 text-green-500 shrink-0" />
+          <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            Marcar como Ganho
+          </h3>
+        </div>
+        <div class="px-5 py-4">
+          <p class="text-xs text-slate-500 dark:text-slate-400">
+            Confirmar que
+            <span class="font-semibold text-slate-700 dark:text-slate-200">{{
+              pendingWonDrag.item?.title
+            }}</span>
+            foi <span class="text-green-600 font-semibold">GANHO</span>?
+          </p>
+        </div>
+        <div
+          class="px-5 py-3 bg-slate-50 dark:bg-slate-900 flex justify-end gap-2 rounded-b-xl border-t border-slate-100 dark:border-slate-700"
+        >
+          <button
+            class="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-medium transition-colors"
+            @click="cancelPendingWon"
+          >
+            Cancelar
+          </button>
+          <button
+            class="text-xs px-3 py-1.5 rounded-lg bg-green-500 text-white hover:bg-green-600 font-medium transition-colors"
+            @click="confirmPendingWon"
+          >
+            Confirmar Ganho
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Add card modal -->
     <div
