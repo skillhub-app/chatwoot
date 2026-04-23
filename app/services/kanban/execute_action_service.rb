@@ -107,31 +107,159 @@ class Kanban::ExecuteActionService
   # ── Webhook ─────────────────────────────────────────────────────────────────
 
   def execute_send_webhook
-    payload = build_webhook_payload
-    WebhookJob.perform_later(@config['url'], payload)
-    log_activity('automation_webhook_dispatched', url: @config['url'])
-    @execution.update!(result: { url: @config['url'] })
+    url    = build_webhook_url
+    method = (@config['method'].presence || 'POST').upcase
+    headers = build_webhook_headers
+    body    = build_webhook_body
+
+    conn = Faraday.new(url: url) do |f|
+      f.options.timeout      = 15
+      f.options.open_timeout = 5
+    end
+
+    response = conn.send(method.downcase.to_sym) do |req|
+      headers.each { |k, v| req.headers[k] = v }
+      req.body = body.to_json unless method == 'GET'
+    end
+
+    log_activity('automation_webhook_dispatched', url: url, status: response.status)
+    @execution.update!(result: {
+      url:           url,
+      method:        method,
+      status:        response.status,
+      response_body: response.body.to_s.first(1000)
+    })
+  rescue StandardError => e
+    log_activity('automation_webhook_failed', url: url, error: e.message)
+    @execution.update!(result: { url: url, error: e.message })
+    raise
   end
 
-  def build_webhook_payload
+  def build_webhook_url
+    url = @config['url'].to_s
+    if @config['auth_type'] == 'api_key_query'
+      key   = @config['auth_key_name'].presence || 'api_key'
+      value = @config['auth_key_value'].to_s
+      separator = url.include?('?') ? '&' : '?'
+      url = "#{url}#{separator}#{CGI.escape(key)}=#{CGI.escape(value)}"
+    end
+    url
+  end
+
+  def build_webhook_headers
+    headers = { 'Content-Type' => 'application/json' }
+
+    custom = @config['headers']
+    if custom.is_a?(Hash)
+      custom.each { |k, v| headers[k.to_s] = interpolate_vars(v.to_s) }
+    end
+
+    case @config['auth_type']
+    when 'bearer'
+      headers['Authorization'] = "Bearer #{@config['auth_token']}"
+    when 'basic'
+      creds = Base64.strict_encode64("#{@config['auth_user']}:#{@config['auth_pass']}")
+      headers['Authorization'] = "Basic #{creds}"
+    when 'api_key_header'
+      key = @config['auth_key_name'].presence || 'X-API-Key'
+      headers[key] = @config['auth_key_value'].to_s
+    end
+
+    headers
+  end
+
+  def build_webhook_body
+    base = @config['full_crm_payload'] ? build_full_crm_payload : { event: 'kanban.automation.triggered', timestamp: Time.current.iso8601, card_id: @item.id }
+
+    raw_custom = @config['custom_payload']
+    return base unless raw_custom.present?
+
+    json_str = raw_custom.is_a?(String) ? raw_custom : raw_custom.to_json
+    custom = JSON.parse(interpolate_vars(json_str))
+    base.is_a?(Hash) ? base.merge(custom.deep_symbolize_keys) : custom
+  rescue JSON::ParseError
+    base
+  end
+
+  def build_full_crm_payload
+    stage      = @automation.trigger_stage
+    pipeline   = KanbanPipeline.find_by(id: @item.pipeline_id)
+    contact    = @item.contact
+    assignee   = @item.assignee_id ? User.find_by(id: @item.assignee_id) : nil
+    conversation = @item.conversation_id ? Conversation.find_by(id: @item.conversation_id) : nil
+
     {
       event:                'kanban.automation.triggered',
       timestamp:            Time.current.iso8601,
       automation_action_id: @action.id,
-      item: {
-        id:             @item.id,
-        title:          @item.title,
-        stage_id:       @item.stage_id,
-        pipeline_id:    @item.pipeline_id,
-        value:          @item.value,
-        contact_phone:  @item.contact_phone,
-        assignee_id:    @item.assignee_id,
-        status:         @item.status,
-        won_at:         @item.won_at,
-        lost_at:        @item.lost_at
+      lead: {
+        id:    contact&.id,
+        name:  contact&.name,
+        phone: @item.contact_phone,
+        email: contact&.email
       },
-      custom_payload: @config['payload'] || {}
+      card: {
+        id:         @item.id,
+        title:      @item.title,
+        value:      @item.value,
+        status:     @item.status,
+        won_at:     @item.won_at,
+        lost_at:    @item.lost_at,
+        created_at: @item.created_at
+      },
+      pipeline: {
+        id:   pipeline&.id,
+        name: pipeline&.name
+      },
+      stage: {
+        id:    stage&.id,
+        name:  stage&.name,
+        color: stage&.color
+      },
+      owner: {
+        id:    assignee&.id,
+        name:  assignee&.name,
+        email: assignee&.email
+      },
+      conversation: {
+        id:       conversation&.id,
+        status:   conversation&.status,
+        inbox_id: conversation&.inbox_id
+      },
+      automation: {
+        id:   @automation.id,
+        name: @automation.name
+      },
+      account: {
+        id: @item.account_id
+      }
     }
+  end
+
+  def webhook_variables
+    stage    = @automation.trigger_stage
+    pipeline = KanbanPipeline.find_by(id: @item.pipeline_id)
+    contact  = @item.contact
+    assignee = @item.assignee_id ? User.find_by(id: @item.assignee_id) : nil
+    conversation = @item.conversation_id ? Conversation.find_by(id: @item.conversation_id) : nil
+
+    {
+      'lead'         => { 'name' => contact&.name, 'phone' => @item.contact_phone, 'email' => contact&.email, 'id' => contact&.id.to_s },
+      'card'         => { 'id' => @item.id.to_s, 'title' => @item.title, 'value' => @item.value.to_s, 'status' => @item.status },
+      'pipeline'     => { 'id' => pipeline&.id.to_s, 'name' => pipeline&.name },
+      'stage'        => { 'id' => stage&.id.to_s, 'name' => stage&.name },
+      'owner'        => { 'id' => assignee&.id.to_s, 'name' => assignee&.name, 'email' => assignee&.email },
+      'conversation' => { 'id' => conversation&.id.to_s }
+    }
+  end
+
+  def interpolate_vars(text)
+    vars = webhook_variables
+    text.gsub(/\{\{\s*([\w.]+)\s*\}\}/) do
+      parts = $1.split('.')
+      val = parts.reduce(vars) { |h, k| h.is_a?(Hash) ? h[k] : nil }
+      val.nil? ? "{{#{$1}}}" : val.to_s
+    end
   end
 
   # ── Task ────────────────────────────────────────────────────────────────────

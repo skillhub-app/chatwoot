@@ -180,6 +180,44 @@ const blankForm = () => ({
 
 const actionForm = ref(blankForm());
 
+// ── Webhook helpers ───────────────────────────────────────────────────────────
+const WEBHOOK_VARIABLES = [
+  'lead.name', 'lead.phone', 'lead.email', 'lead.id',
+  'card.id', 'card.title', 'card.value', 'card.status',
+  'pipeline.id', 'pipeline.name',
+  'stage.id', 'stage.name',
+  'owner.id', 'owner.name', 'owner.email',
+  'conversation.id',
+];
+
+const webhookHeaders = ref([]);
+
+function syncWebhookHeaders() {
+  const obj = {};
+  webhookHeaders.value.forEach(h => {
+    if (h.key.trim()) obj[h.key.trim()] = h.value;
+  });
+  actionForm.value.config.headers = obj;
+}
+
+function addWebhookHeader() {
+  webhookHeaders.value.push({ key: '', value: '' });
+  syncWebhookHeaders();
+}
+
+function removeWebhookHeader(idx) {
+  webhookHeaders.value.splice(idx, 1);
+  syncWebhookHeaders();
+}
+
+function copyVar(v) {
+  navigator.clipboard?.writeText(`{{ ${v} }}`);
+}
+
+function fmtVar(v) {
+  return `{{ ${v} }}`;
+}
+
 function openAdd(stage) {
   actionFormStage.value = stage;
   actionFormEditing.value = null;
@@ -187,6 +225,7 @@ function openAdd(stage) {
     ...blankForm(),
     position: actionsForStage(stage.id).length,
   };
+  webhookHeaders.value = [];
   actionFormError.value = null;
   showActionForm.value = true;
 }
@@ -202,6 +241,10 @@ function openEdit(stage, action) {
     active: action.active,
     config: { ...action.config },
   };
+  const savedHeaders = action.config?.headers;
+  webhookHeaders.value = savedHeaders
+    ? Object.entries(savedHeaders).map(([key, value]) => ({ key, value }))
+    : [];
   actionFormError.value = null;
   showActionForm.value = true;
 }
@@ -219,6 +262,7 @@ function onTypeChange() {
 async function saveAction() {
   actionFormSaving.value = true;
   actionFormError.value = null;
+  if (actionForm.value.action_type === 'send_webhook') syncWebhookHeaders();
   try {
     const auto = await ensureAutomation(actionFormStage.value);
     const data = {
@@ -739,6 +783,48 @@ async function toggleActive(stage, action) {
 
           <!-- Webhook -->
           <template v-if="actionForm.action_type === 'send_webhook'">
+            <!-- Mode toggle -->
+            <div
+              class="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg"
+            >
+              <button
+                class="flex-1 text-xs py-1.5 rounded-md font-medium transition-colors"
+                :class="
+                  !actionForm.config.advanced_mode
+                    ? 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 shadow-sm'
+                    : 'text-slate-400'
+                "
+                @click="actionForm.config.advanced_mode = false"
+              >
+                Simples
+              </button>
+              <button
+                class="flex-1 text-xs py-1.5 rounded-md font-medium transition-colors"
+                :class="
+                  actionForm.config.advanced_mode
+                    ? 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 shadow-sm'
+                    : 'text-slate-400'
+                "
+                @click="actionForm.config.advanced_mode = true"
+              >
+                Avançado
+              </button>
+            </div>
+
+            <!-- Name (advanced) -->
+            <div v-if="actionForm.config.advanced_mode">
+              <label class="text-xs font-medium text-slate-500 mb-1.5 block"
+                >Nome do webhook</label
+              >
+              <input
+                v-model="actionForm.config.name"
+                type="text"
+                placeholder="Ex: Notificar CRM interno"
+                class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+              />
+            </div>
+
+            <!-- URL -->
             <div>
               <label class="text-xs font-medium text-slate-500 mb-1.5 block"
                 >URL</label
@@ -750,6 +836,8 @@ async function toggleActive(stage, action) {
                 class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
               />
             </div>
+
+            <!-- Method -->
             <div>
               <label class="text-xs font-medium text-slate-500 mb-1.5 block"
                 >Método</label
@@ -764,28 +852,173 @@ async function toggleActive(stage, action) {
                 <option value="PATCH">PATCH</option>
               </select>
             </div>
+
+            <!-- Auth -->
             <div>
               <label class="text-xs font-medium text-slate-500 mb-1.5 block"
-                >Payload (JSON)</label
+                >Autenticação</label
               >
+              <select
+                v-model="actionForm.config.auth_type"
+                class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30 mb-2"
+              >
+                <option value="">Nenhuma</option>
+                <option value="bearer">Bearer Token</option>
+                <option value="basic">Basic Auth</option>
+                <option value="api_key_header">API Key (Header)</option>
+                <option value="api_key_query">API Key (Query Param)</option>
+              </select>
+              <div v-if="actionForm.config.auth_type === 'bearer'">
+                <input
+                  v-model="actionForm.config.auth_token"
+                  type="text"
+                  placeholder="Token"
+                  class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                />
+              </div>
+              <div
+                v-if="actionForm.config.auth_type === 'basic'"
+                class="flex gap-2"
+              >
+                <input
+                  v-model="actionForm.config.auth_user"
+                  type="text"
+                  placeholder="Usuário"
+                  class="flex-1 text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                />
+                <input
+                  v-model="actionForm.config.auth_pass"
+                  type="password"
+                  placeholder="Senha"
+                  class="flex-1 text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                />
+              </div>
+              <div
+                v-if="
+                  actionForm.config.auth_type === 'api_key_header' ||
+                  actionForm.config.auth_type === 'api_key_query'
+                "
+                class="flex gap-2"
+              >
+                <input
+                  v-model="actionForm.config.auth_key_name"
+                  type="text"
+                  :placeholder="
+                    actionForm.config.auth_type === 'api_key_header'
+                      ? 'X-API-Key'
+                      : 'api_key'
+                  "
+                  class="flex-1 text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                />
+                <input
+                  v-model="actionForm.config.auth_key_value"
+                  type="text"
+                  placeholder="Valor"
+                  class="flex-1 text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                />
+              </div>
+            </div>
+
+            <!-- Full CRM payload toggle -->
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                v-model="actionForm.config.full_crm_payload"
+                type="checkbox"
+                class="rounded border-slate-300 text-blue-600"
+              />
+              <span
+                class="text-xs font-medium text-slate-600 dark:text-slate-300"
+                >Enviar payload completo do CRM</span
+              >
+            </label>
+            <p
+              v-if="actionForm.config.full_crm_payload"
+              class="text-[11px] text-slate-400 -mt-2"
+            >
+              Inclui: lead, card, pipeline, etapa, responsável, conversa,
+              automação, conta
+            </p>
+
+            <!-- Custom payload -->
+            <div>
+              <label class="text-xs font-medium text-slate-500 mb-1.5 block">
+                {{
+                  actionForm.config.full_crm_payload
+                    ? 'Campos extras (mesclados ao payload)'
+                    : 'Payload (JSON)'
+                }}
+              </label>
               <textarea
-                v-model="actionForm.config.payload"
+                v-model="actionForm.config.custom_payload"
                 rows="4"
-                placeholder='{"key": "value"}'
+                placeholder='{"status": "{{ card.status }}", "cliente": "{{ lead.name }}"}'
                 class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30 resize-none font-mono"
               />
             </div>
-            <div>
-              <label class="text-xs font-medium text-slate-500 mb-1.5 block"
-                >Headers (JSON)</label
+
+            <!-- Custom headers (advanced) -->
+            <div v-if="actionForm.config.advanced_mode">
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="text-xs font-medium text-slate-500"
+                  >Headers customizados</label
+                >
+                <button
+                  class="text-[11px] text-violet-500 hover:underline"
+                  @click="addWebhookHeader"
+                >
+                  + Adicionar
+                </button>
+              </div>
+              <div
+                v-for="(header, idx) in webhookHeaders"
+                :key="idx"
+                class="flex gap-2 mb-1.5"
               >
-              <textarea
-                v-model="actionForm.config.headers"
-                rows="2"
-                placeholder='{"Authorization": "Bearer token"}'
-                class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30 resize-none font-mono"
-              />
+                <input
+                  v-model="header.key"
+                  type="text"
+                  placeholder="Nome"
+                  class="flex-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                  @input="syncWebhookHeaders"
+                />
+                <input
+                  v-model="header.value"
+                  type="text"
+                  placeholder="Valor"
+                  class="flex-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                  @input="syncWebhookHeaders"
+                />
+                <button
+                  class="text-slate-300 hover:text-red-400 transition-colors px-1"
+                  @click="removeWebhookHeader(idx)"
+                >
+                  <span class="i-lucide-x size-3.5" />
+                </button>
+              </div>
             </div>
+
+            <!-- Variables reference -->
+            <details class="group/vars">
+              <summary
+                class="text-[11px] text-slate-400 cursor-pointer hover:text-slate-600 select-none list-none flex items-center gap-1"
+              >
+                <span
+                  class="i-lucide-chevron-right size-3 group-open/vars:rotate-90 transition-transform"
+                />
+                Variáveis disponíveis
+              </summary>
+              <div class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+                <span
+                  v-for="v in WEBHOOK_VARIABLES"
+                  :key="v"
+                  class="text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 transition-colors"
+                  title="Clique para copiar"
+                  @click="copyVar(v)"
+                >
+                  {{ fmtVar(v) }}
+                </span>
+              </div>
+            </details>
           </template>
 
           <!-- Task -->
