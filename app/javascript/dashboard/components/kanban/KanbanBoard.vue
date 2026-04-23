@@ -5,7 +5,6 @@ import { useRouter } from 'vue-router';
 import KanbanColumn from './KanbanColumn.vue';
 import KanbanCardModal from './KanbanCardModal.vue';
 import KanbanPipelineModal from './KanbanPipelineModal.vue';
-import KanbanAutomationModal from './KanbanAutomationModal.vue';
 import ContactsAPI from 'dashboard/api/contacts.js';
 
 const router = useRouter();
@@ -39,7 +38,6 @@ const contactSearchLoading = ref(false);
 const linkedContact = ref(null);
 const cepLoading = ref(false);
 const showPipelineModal = ref(false);
-const showAutomationModal = ref(false);
 const editingPipeline = ref(null);
 const showPipelineDropdown = ref(false);
 const showFilters = ref(false);
@@ -521,9 +519,8 @@ async function confirmPendingWon() {
           Ranking
         </button>
         <button
-          v-if="activePipeline"
           class="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 font-medium transition-colors border border-violet-200 dark:border-violet-700"
-          @click="showAutomationModal = true"
+          @click="router.push({ name: 'kanban_automation' })"
         >
           <span class="i-lucide-zap size-3.5" />
           Automação de CRM
@@ -796,13 +793,6 @@ async function confirmPendingWon() {
       :pipeline="editingPipeline"
       @close="showPipelineModal = false"
       @saved="showPipelineModal = false"
-    />
-
-    <!-- CRM Automation modal -->
-    <KanbanAutomationModal
-      v-if="showAutomationModal && activePipeline"
-      :pipeline="activePipeline"
-      @close="showAutomationModal = false"
     />
 
     <!-- Lost reason picker dialog -->
