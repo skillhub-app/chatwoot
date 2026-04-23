@@ -23,12 +23,13 @@ class KanbanAutomation < ApplicationRecord
   belongs_to :pipeline, class_name: 'KanbanPipeline'
   belongs_to :trigger_stage, class_name: 'KanbanStage'
   belongs_to :action_stage, class_name: 'KanbanStage', optional: true
+  has_many   :kanban_automation_actions, dependent: :destroy
 
   validates :name, presence: true, length: { maximum: 255 }
   validate :trigger_and_action_stages_belong_to_pipeline
 
-  scope :active, -> { where(active: true) }
-  scope :inactive, -> { where(active: false) }
+  scope :active,       -> { where(active: true) }
+  scope :inactive,     -> { where(active: false) }
   scope :for_pipeline, ->(pipeline_id) { where(pipeline_id: pipeline_id) }
   scope :triggered_by, ->(stage_id) { where(trigger_stage_id: stage_id) }
 

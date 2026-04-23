@@ -124,6 +124,9 @@ Rails.application.routes.draw do
             resources :badges, only: [:index, :create, :update, :destroy] do
               collection { post :seed }
             end
+            resources :automations, only: [:index, :show, :create, :update, :destroy] do
+              resources :actions, only: [:index, :create, :update, :destroy], controller: 'automation_actions'
+            end
             resources :pipelines, only: [:index, :show, :create, :update, :destroy] do
               resources :stages, only: [:index, :show, :create, :update, :destroy] do
                 patch :reorder, on: :member
@@ -145,6 +148,7 @@ Rails.application.routes.draw do
                 resources :notes, only: [:index, :create, :destroy]
                 resources :activities, only: [:index]
                 resources :attachments, only: [:index, :create, :destroy]
+                resources :automation_executions, only: [:index], controller: 'automation_executions'
               end
             end
             resources :webhooks, only: [:index, :show, :create, :update, :destroy]

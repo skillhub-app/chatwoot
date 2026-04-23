@@ -230,6 +230,49 @@ class KanbanGoalsAPI extends ApiClient {
   }
 }
 
+class KanbanAutomationsAPI extends ApiClient {
+  constructor() {
+    super('kanban/automations', { accountScoped: true });
+  }
+
+  list(params = {}) {
+    return axios.get(this.url, { params });
+  }
+
+  show(id) {
+    return axios.get(`${this.url}/${id}`);
+  }
+
+  create(data) {
+    return axios.post(this.url, data);
+  }
+
+  update(id, data) {
+    return axios.patch(`${this.url}/${id}`, data);
+  }
+
+  delete(id) {
+    return axios.delete(`${this.url}/${id}`);
+  }
+
+  listActions(automationId) {
+    return axios.get(`${this.url}/${automationId}/actions`);
+  }
+
+  createAction(automationId, data) {
+    return axios.post(`${this.url}/${automationId}/actions`, data);
+  }
+
+  updateAction(automationId, actionId, data) {
+    return axios.patch(`${this.url}/${automationId}/actions/${actionId}`, data);
+  }
+
+  deleteAction(automationId, actionId) {
+    return axios.delete(`${this.url}/${automationId}/actions/${actionId}`);
+  }
+}
+
+export const automationsAPI = new KanbanAutomationsAPI();
 export const badgesAPI = new KanbanBadgesAPI();
 export const pipelinesAPI = new KanbanPipelinesAPI();
 export const lostReasonsAPI = new KanbanLostReasonsAPI();

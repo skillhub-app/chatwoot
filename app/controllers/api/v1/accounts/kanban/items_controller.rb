@@ -41,6 +41,7 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
     prev_pipeline_name = @pipeline.name
     prev_stage_name    = @item.stage.name
 
+    prev_stage_id = @item.stage_id
     @item.update!(pipeline: target_pipeline, stage: target_stage, position: 0)
 
     log_activity(
@@ -50,6 +51,8 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
       from_stage_name: prev_stage_name, to_stage_name: target_stage.name,
       description: "#{prev_pipeline_name}/#{prev_stage_name} → #{target_pipeline.name}/#{target_stage.name}"
     )
+    Kanban::CancelAutomationsService.new(@item, prev_stage_id).perform
+    Kanban::AutomationSchedulerService.new(@item, target_stage).perform
   end
 
   def update
@@ -65,6 +68,8 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
                    from_stage: prev['stage_id'], to_stage: @item.stage_id,
                    from_stage_name: from_stage&.name, to_stage_name: to_stage&.name,
                    description: "#{from_stage&.name} → #{to_stage&.name}")
+      Kanban::CancelAutomationsService.new(@item, prev['stage_id']).perform
+      Kanban::AutomationSchedulerService.new(@item, to_stage).perform
     end
     if @item.assignee_id != prev['assignee_id']
       assignee = @item.assignee
@@ -119,6 +124,8 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
                    from_stage: prev_stage_id, to_stage: stage.id,
                    from_stage_name: from_stage&.name, to_stage_name: stage.name,
                    description: "#{from_stage&.name} → #{stage.name}")
+      Kanban::CancelAutomationsService.new(@item, prev_stage_id).perform
+      Kanban::AutomationSchedulerService.new(@item, stage).perform
     end
   end
 
@@ -137,6 +144,8 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
       log_activity('moved', from_stage: prev_stage_id, to_stage: won_stage.id,
                             from_stage_name: from_stage&.name, to_stage_name: won_stage.name,
                             description: "#{from_stage&.name} → #{won_stage.name}")
+      Kanban::CancelAutomationsService.new(@item, prev_stage_id).perform
+      Kanban::AutomationSchedulerService.new(@item, won_stage).perform
     end
 
     auto_resolve_conversation if @pipeline.settings['auto_resolve_conversation']
@@ -168,6 +177,8 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
       log_activity('moved', from_stage: prev_stage_id, to_stage: lost_stage.id,
                             from_stage_name: from_stage&.name, to_stage_name: lost_stage.name,
                             description: "#{from_stage&.name} → #{lost_stage.name}")
+      Kanban::CancelAutomationsService.new(@item, prev_stage_id).perform
+      Kanban::AutomationSchedulerService.new(@item, lost_stage).perform
     end
 
     auto_resolve_conversation if @pipeline.settings['auto_resolve_conversation']

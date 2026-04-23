@@ -22,6 +22,9 @@ class KanbanActivity < ApplicationRecord
     task_created task_completed file_attached won lost reopened
     temperature_changed score_changed source_changed probability_changed
     conversation_linked phone_changed contact_linked
+    automation_scheduled automation_cancelled automation_executed
+    automation_message_sent automation_webhook_dispatched
+    automation_task_created automation_failed automation_skipped
   ].freeze
 
   belongs_to :kanban_item
