@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue';
+import { useStore } from 'vuex';
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -66,6 +67,16 @@ const hasTasks = computed(
   () => props.item.pending_tasks_count > 0 || props.item.tasks_count > 0
 );
 const hasAttachments = computed(() => props.item.attachments_count > 0);
+
+const store = useStore();
+const allLabels = computed(() => store.getters['labels/getLabels'] || []);
+const conversationLabels = computed(() => {
+  const names = props.item.conversation_labels || [];
+  return names.map(name => {
+    const found = allLabels.value.find(l => l.title === name);
+    return { title: name, color: found?.color || '#6366f1' };
+  });
+});
 </script>
 
 <template>
@@ -161,6 +172,21 @@ const hasAttachments = computed(() => props.item.attachments_count > 0);
           <span class="text-xs text-slate-500 dark:text-slate-400">{{
             item.contact_phone
           }}</span>
+        </div>
+
+        <!-- Conversation labels -->
+        <div
+          v-if="conversationLabels.length"
+          class="flex flex-wrap gap-1 mb-1.5"
+        >
+          <span
+            v-for="label in conversationLabels"
+            :key="label.title"
+            class="inline-flex items-center text-[9px] font-semibold px-1.5 py-0.5 rounded-full text-white leading-none"
+            :style="{ backgroundColor: label.color }"
+          >
+            {{ label.title }}
+          </span>
         </div>
 
         <!-- Footer: assignee + badges -->

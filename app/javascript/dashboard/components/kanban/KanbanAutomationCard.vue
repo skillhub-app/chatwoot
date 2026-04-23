@@ -32,6 +32,14 @@ const TYPE_CONFIG = {
     text: 'text-violet-600 dark:text-violet-400',
     border: '#8b5cf6',
   },
+  crm_action: {
+    label: 'Ação CRM',
+    icon: 'i-lucide-git-branch',
+    color: '#f59e0b',
+    bg: 'bg-amber-50 dark:bg-amber-900/20',
+    text: 'text-amber-600 dark:text-amber-400',
+    border: '#f59e0b',
+  },
 };
 
 const DELAY_LABELS = {
@@ -58,8 +66,13 @@ function contentPreview(action) {
       return cfg.ai_prompt ? `IA: ${cfg.ai_prompt}` : 'Mensagem por IA';
     return cfg.message || '—';
   }
-  if (action.action_type === 'send_webhook') return cfg.url || '—';
+  if (action.action_type === 'send_webhook') return cfg.name || cfg.url || '—';
   if (action.action_type === 'create_task') return cfg.title || '—';
+  if (action.action_type === 'crm_action') {
+    const actCount = (cfg.crm_actions || []).length;
+    const condCount = (cfg.conditions || []).length;
+    return `${condCount} cond. → ${actCount} ação(ões)`;
+  }
   return '—';
 }
 </script>

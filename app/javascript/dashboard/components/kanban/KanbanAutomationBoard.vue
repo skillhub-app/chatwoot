@@ -60,6 +60,8 @@ onMounted(() => {
   selectedPipelineId.value =
     activePipelineId.value || pipelines.value[0]?.id || null;
   if (selectedPipelineId.value) reload();
+  store.dispatch('labels/get');
+  store.dispatch('kanban/fetchLostReasons');
 });
 
 // ── Stage ↔ Automation helpers ────────────────────────────────────────────────
@@ -167,6 +169,12 @@ const ACTION_TYPES = [
     icon: 'i-lucide-check-square',
     color: 'text-violet-500',
   },
+  {
+    value: 'crm_action',
+    label: 'Ação CRM',
+    icon: 'i-lucide-git-branch',
+    color: 'text-amber-500',
+  },
 ];
 
 const blankForm = () => ({
@@ -217,6 +225,102 @@ function copyVar(v) {
 function fmtVar(v) {
   return `{{ ${v} }}`;
 }
+
+// ── CRM action helpers ────────────────────────────────────────────────────────
+const CRM_EVENTS = [
+  { value: 'lead_entered_stage', label: 'Lead entrou na etapa' },
+  { value: 'lead_left_stage', label: 'Lead saiu da etapa' },
+  { value: 'card_created', label: 'Card criado' },
+  { value: 'card_moved', label: 'Card movido' },
+  { value: 'lead_won', label: 'Lead marcado como ganho' },
+  { value: 'lead_lost', label: 'Lead marcado como perdido' },
+  { value: 'task_created', label: 'Tarefa criada' },
+  { value: 'task_completed', label: 'Tarefa concluída' },
+  { value: 'conversation_created', label: 'Conversa criada' },
+  { value: 'message_created', label: 'Mensagem criada' },
+  { value: 'label_added', label: 'Etiqueta adicionada' },
+  { value: 'label_removed', label: 'Etiqueta removida' },
+];
+
+const CRM_CONDITION_ATTRIBUTES = [
+  { value: 'lead_in_pipeline', label: 'Lead está no funil', valueType: 'pipeline' },
+  { value: 'lead_in_stage', label: 'Lead está na etapa', valueType: 'stage' },
+  { value: 'lead_in_pipeline_and_stage', label: 'Lead está no funil + etapa', valueType: 'pipeline_stage' },
+  { value: 'lead_assignee', label: 'Responsável pelo lead', valueType: 'agent' },
+  { value: 'lead_status', label: 'Status do lead', valueType: 'lead_status' },
+  { value: 'lead_has_pending_task', label: 'Lead tem tarefa pendente', valueType: 'boolean' },
+  { value: 'lead_has_conversation', label: 'Lead tem conversa vinculada', valueType: 'boolean' },
+  { value: 'lead_has_lost_reason', label: 'Motivo de perda', valueType: 'lost_reason' },
+  { value: 'conversation_inbox', label: 'Caixa de entrada', valueType: 'inbox' },
+  { value: 'conversation_label', label: 'Etiqueta na conversa', valueType: 'label' },
+];
+
+const CRM_ACTION_TYPES = [
+  { value: 'move_item', label: 'Mover lead para etapa', icon: 'i-lucide-arrow-right' },
+  { value: 'assign_agent', label: 'Atribuir responsável', icon: 'i-lucide-user-check' },
+  { value: 'add_note', label: 'Adicionar nota', icon: 'i-lucide-sticky-note' },
+  { value: 'create_item', label: 'Criar novo card', icon: 'i-lucide-plus-square' },
+];
+
+const getPipelineStages = computed(() => store.getters['kanban/getPipelineStagesCache']);
+const allPipelines = computed(() => store.getters['kanban/getPipelines'] || []);
+const allLabels = computed(() => store.getters['labels/getLabels'] || []);
+const lostReasons = computed(() => store.getters['kanban/getLostReasons'] || []);
+
+async function ensurePipelineStages(pipelineId) {
+  if (!pipelineId) return;
+  const cached = getPipelineStages.value(pipelineId);
+  if (!cached.length) {
+    await store.dispatch('kanban/fetchPipelineStages', pipelineId);
+  }
+}
+
+function addCrmCondition() {
+  if (!actionForm.value.config.conditions) actionForm.value.config.conditions = [];
+  actionForm.value.config.conditions.push({ attribute: 'lead_in_pipeline', value: '' });
+}
+
+function removeCrmCondition(idx) {
+  actionForm.value.config.conditions.splice(idx, 1);
+}
+
+function addCrmAction() {
+  if (!actionForm.value.config.crm_actions) actionForm.value.config.crm_actions = [];
+  actionForm.value.config.crm_actions.push({ type: 'move_item', pipeline_id: '', stage_id: '' });
+}
+
+function removeCrmAction(idx) {
+  actionForm.value.config.crm_actions.splice(idx, 1);
+}
+
+function conditionAttrMeta(attribute) {
+  return CRM_CONDITION_ATTRIBUTES.find(a => a.value === attribute) || { valueType: 'text' };
+}
+
+watch(
+  () => actionForm.value.config.conditions,
+  async (conds) => {
+    if (!conds) return;
+    const pids = conds
+      .filter(c => {
+        const { valueType } = conditionAttrMeta(c.attribute);
+        return (valueType === 'stage' || valueType === 'pipeline_stage') && c.pipeline_id;
+      })
+      .map(c => c.pipeline_id);
+    await Promise.all([...new Set(pids)].map(pid => ensurePipelineStages(pid)));
+  },
+  { deep: true }
+);
+
+watch(
+  () => actionForm.value.config.crm_actions,
+  async (acts) => {
+    if (!acts) return;
+    const pids = acts.filter(a => a.pipeline_id).map(a => Number(a.pipeline_id));
+    await Promise.all([...new Set(pids)].map(pid => ensurePipelineStages(pid)));
+  },
+  { deep: true }
+);
 
 function openAdd(stage) {
   actionFormStage.value = stage;
@@ -779,6 +883,92 @@ async function toggleActive(stage, action) {
                 Deixe vazio para enviar a qualquer hora
               </p>
             </div>
+
+            <!-- Multi-inbox: nova conversa -->
+            <div
+              class="border border-slate-100 dark:border-slate-700 rounded-lg p-3 space-y-3"
+            >
+              <p
+                class="text-xs font-semibold text-slate-500 dark:text-slate-400"
+              >
+                Comportamento ao usar inbox diferente
+              </p>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  v-model="actionForm.config.open_new_conversation"
+                  type="checkbox"
+                  class="rounded border-slate-300 text-emerald-600"
+                />
+                <span class="text-xs text-slate-600 dark:text-slate-300"
+                  >Abrir nova conversa se a inbox for diferente</span
+                >
+              </label>
+              <template v-if="actionForm.config.open_new_conversation">
+                <div class="pl-4 space-y-2">
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input
+                      v-model="actionForm.config.new_conv_same_card"
+                      type="radio"
+                      :value="true"
+                      class="text-emerald-600"
+                    />
+                    <span class="text-xs text-slate-600 dark:text-slate-300"
+                      >Vincular nova conversa ao mesmo card</span
+                    >
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input
+                      v-model="actionForm.config.new_conv_same_card"
+                      type="radio"
+                      :value="false"
+                      class="text-emerald-600"
+                    />
+                    <span class="text-xs text-slate-600 dark:text-slate-300"
+                      >Criar novo card para a nova conversa</span
+                    >
+                  </label>
+                  <template
+                    v-if="actionForm.config.new_conv_same_card === false"
+                  >
+                    <div class="flex gap-2">
+                      <select
+                        v-model.number="actionForm.config.new_conv_pipeline_id"
+                        class="flex-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                        @change="
+                          ensurePipelineStages(
+                            actionForm.config.new_conv_pipeline_id
+                          )
+                        "
+                      >
+                        <option :value="undefined">Funil</option>
+                        <option
+                          v-for="p in allPipelines"
+                          :key="p.id"
+                          :value="p.id"
+                        >
+                          {{ p.name }}
+                        </option>
+                      </select>
+                      <select
+                        v-model.number="actionForm.config.new_conv_stage_id"
+                        class="flex-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                      >
+                        <option :value="undefined">Etapa</option>
+                        <option
+                          v-for="s in getPipelineStages(
+                            actionForm.config.new_conv_pipeline_id
+                          )"
+                          :key="s.id"
+                          :value="s.id"
+                        >
+                          {{ s.name }}
+                        </option>
+                      </select>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
           </template>
 
           <!-- Webhook -->
@@ -1089,6 +1279,391 @@ async function toggleActive(stage, action) {
                 placeholder="24"
                 class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
               />
+            </div>
+          </template>
+
+          <!-- CRM Action -->
+          <template v-if="actionForm.action_type === 'crm_action'">
+            <!-- Event -->
+            <div>
+              <label class="text-xs font-medium text-slate-500 mb-1.5 block"
+                >Evento (referência)</label
+              >
+              <select
+                v-model="actionForm.config.event"
+                class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+              >
+                <option value="">Qualquer / Agendado</option>
+                <option
+                  v-for="ev in CRM_EVENTS"
+                  :key="ev.value"
+                  :value="ev.value"
+                >
+                  {{ ev.label }}
+                </option>
+              </select>
+              <p class="text-[11px] text-slate-400 mt-1">
+                Define o contexto; a execução ocorre no horário agendado.
+              </p>
+            </div>
+
+            <!-- Conditions -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-xs font-semibold text-slate-500"
+                  >Condições</label
+                >
+                <div class="flex items-center gap-2">
+                  <select
+                    v-model="actionForm.config.condition_logic"
+                    class="text-xs px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+                  >
+                    <option value="AND">E (todas)</option>
+                    <option value="OR">OU (qualquer)</option>
+                  </select>
+                  <button
+                    class="text-[11px] text-amber-500 hover:underline"
+                    @click="addCrmCondition"
+                  >
+                    + Adicionar
+                  </button>
+                </div>
+              </div>
+
+              <div
+                v-for="(cond, idx) in actionForm.config.conditions || []"
+                :key="idx"
+                class="flex gap-1.5 mb-2 items-start"
+              >
+                <div class="flex-1 space-y-1.5">
+                  <select
+                    v-model="cond.attribute"
+                    class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                  >
+                    <option
+                      v-for="a in CRM_CONDITION_ATTRIBUTES"
+                      :key="a.value"
+                      :value="a.value"
+                    >
+                      {{ a.label }}
+                    </option>
+                  </select>
+
+                  <!-- Value: pipeline -->
+                  <select
+                    v-if="
+                      conditionAttrMeta(cond.attribute).valueType === 'pipeline'
+                    "
+                    v-model="cond.value"
+                    class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                  >
+                    <option value="">Selecionar funil</option>
+                    <option
+                      v-for="p in allPipelines"
+                      :key="p.id"
+                      :value="String(p.id)"
+                    >
+                      {{ p.name }}
+                    </option>
+                  </select>
+
+                  <!-- Value: stage (needs pipeline_id first) -->
+                  <template
+                    v-if="
+                      conditionAttrMeta(cond.attribute).valueType === 'stage'
+                    "
+                  >
+                    <select
+                      v-model="cond.pipeline_id"
+                      class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                      @change="ensurePipelineStages(cond.pipeline_id)"
+                    >
+                      <option value="">Funil</option>
+                      <option
+                        v-for="p in allPipelines"
+                        :key="p.id"
+                        :value="p.id"
+                      >
+                        {{ p.name }}
+                      </option>
+                    </select>
+                    <select
+                      v-model="cond.value"
+                      class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                    >
+                      <option value="">Etapa</option>
+                      <option
+                        v-for="s in getPipelineStages(cond.pipeline_id)"
+                        :key="s.id"
+                        :value="String(s.id)"
+                      >
+                        {{ s.name }}
+                      </option>
+                    </select>
+                  </template>
+
+                  <!-- Value: pipeline_stage combined -->
+                  <template
+                    v-if="
+                      conditionAttrMeta(cond.attribute).valueType ===
+                      'pipeline_stage'
+                    "
+                  >
+                    <select
+                      v-model="cond._pid"
+                      class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                      @change="
+                        e => {
+                          cond._pid = Number(e.target.value);
+                          ensurePipelineStages(cond._pid);
+                          cond.value = '';
+                        }
+                      "
+                    >
+                      <option value="">Funil</option>
+                      <option
+                        v-for="p in allPipelines"
+                        :key="p.id"
+                        :value="p.id"
+                      >
+                        {{ p.name }}
+                      </option>
+                    </select>
+                    <select
+                      v-model="cond._sid"
+                      class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                      @change="
+                        e => {
+                          cond.value = cond._pid + ':' + e.target.value;
+                        }
+                      "
+                    >
+                      <option value="">Etapa</option>
+                      <option
+                        v-for="s in getPipelineStages(cond._pid)"
+                        :key="s.id"
+                        :value="s.id"
+                      >
+                        {{ s.name }}
+                      </option>
+                    </select>
+                  </template>
+
+                  <!-- Value: agent -->
+                  <select
+                    v-if="
+                      conditionAttrMeta(cond.attribute).valueType === 'agent'
+                    "
+                    v-model="cond.value"
+                    class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                  >
+                    <option value="">Selecionar agente</option>
+                    <option
+                      v-for="a in agents"
+                      :key="a.id"
+                      :value="String(a.id)"
+                    >
+                      {{ a.name }}
+                    </option>
+                  </select>
+
+                  <!-- Value: lead_status -->
+                  <select
+                    v-if="
+                      conditionAttrMeta(cond.attribute).valueType ===
+                      'lead_status'
+                    "
+                    v-model="cond.value"
+                    class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                  >
+                    <option value="open">Aberto</option>
+                    <option value="won">Ganho</option>
+                    <option value="lost">Perdido</option>
+                  </select>
+
+                  <!-- Value: boolean -->
+                  <select
+                    v-if="
+                      conditionAttrMeta(cond.attribute).valueType === 'boolean'
+                    "
+                    v-model="cond.value"
+                    class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                  >
+                    <option value="true">Sim</option>
+                    <option value="false">Não</option>
+                  </select>
+
+                  <!-- Value: inbox -->
+                  <select
+                    v-if="
+                      conditionAttrMeta(cond.attribute).valueType === 'inbox'
+                    "
+                    v-model="cond.value"
+                    class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                  >
+                    <option value="">Selecionar inbox</option>
+                    <option
+                      v-for="i in inboxes"
+                      :key="i.id"
+                      :value="String(i.id)"
+                    >
+                      {{ i.name }}
+                    </option>
+                  </select>
+
+                  <!-- Value: label -->
+                  <select
+                    v-if="
+                      conditionAttrMeta(cond.attribute).valueType === 'label'
+                    "
+                    v-model="cond.value"
+                    class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                  >
+                    <option value="">Selecionar etiqueta</option>
+                    <option v-for="l in allLabels" :key="l.id" :value="l.title">
+                      {{ l.title }}
+                    </option>
+                  </select>
+
+                  <!-- Value: lost_reason -->
+                  <select
+                    v-if="
+                      conditionAttrMeta(cond.attribute).valueType ===
+                      'lost_reason'
+                    "
+                    v-model="cond.value"
+                    class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                  >
+                    <option value="">Selecionar motivo</option>
+                    <option
+                      v-for="r in lostReasons"
+                      :key="r.id"
+                      :value="String(r.id)"
+                    >
+                      {{ r.name }}
+                    </option>
+                  </select>
+                </div>
+                <button
+                  class="mt-1 p-1 text-slate-300 hover:text-red-400 transition-colors"
+                  @click="removeCrmCondition(idx)"
+                >
+                  <span class="i-lucide-x size-3.5" />
+                </button>
+              </div>
+
+              <p
+                v-if="!(actionForm.config.conditions || []).length"
+                class="text-[11px] text-slate-400 italic"
+              >
+                Sem condições — a ação executa sempre
+              </p>
+            </div>
+
+            <!-- Actions -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-xs font-semibold text-slate-500"
+                  >Ações a executar</label
+                >
+                <button
+                  class="text-[11px] text-amber-500 hover:underline"
+                  @click="addCrmAction"
+                >
+                  + Adicionar
+                </button>
+              </div>
+
+              <div
+                v-for="(act, idx) in actionForm.config.crm_actions || []"
+                :key="idx"
+                class="border border-slate-100 dark:border-slate-700 rounded-lg p-2.5 mb-2 space-y-2"
+              >
+                <div class="flex items-center gap-2">
+                  <select
+                    v-model="act.type"
+                    class="flex-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                  >
+                    <option
+                      v-for="at in CRM_ACTION_TYPES"
+                      :key="at.value"
+                      :value="at.value"
+                    >
+                      {{ at.label }}
+                    </option>
+                  </select>
+                  <button
+                    class="text-slate-300 hover:text-red-400 transition-colors"
+                    @click="removeCrmAction(idx)"
+                  >
+                    <span class="i-lucide-x size-3.5" />
+                  </button>
+                </div>
+
+                <!-- move_item params -->
+                <template
+                  v-if="act.type === 'move_item' || act.type === 'create_item'"
+                >
+                  <select
+                    v-model.number="act.pipeline_id"
+                    class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                    @change="ensurePipelineStages(act.pipeline_id)"
+                  >
+                    <option :value="undefined">Selecionar funil</option>
+                    <option v-for="p in allPipelines" :key="p.id" :value="p.id">
+                      {{ p.name }}
+                    </option>
+                  </select>
+                  <select
+                    v-model.number="act.stage_id"
+                    class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                  >
+                    <option :value="undefined">Selecionar etapa</option>
+                    <option
+                      v-for="s in getPipelineStages(act.pipeline_id)"
+                      :key="s.id"
+                      :value="s.id"
+                    >
+                      {{ s.name }}
+                    </option>
+                  </select>
+                  <input
+                    v-if="act.type === 'create_item'"
+                    v-model="act.title"
+                    type="text"
+                    placeholder="Título do novo card (deixe vazio para copiar o atual)"
+                    class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                  />
+                </template>
+
+                <!-- assign_agent params -->
+                <select
+                  v-if="act.type === 'assign_agent'"
+                  v-model.number="act.agent_id"
+                  class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                >
+                  <option :value="undefined">Selecionar agente</option>
+                  <option v-for="a in agents" :key="a.id" :value="a.id">
+                    {{ a.name }}
+                  </option>
+                </select>
+
+                <!-- add_note params -->
+                <textarea
+                  v-if="act.type === 'add_note'"
+                  v-model="act.content"
+                  rows="2"
+                  placeholder="Conteúdo da nota..."
+                  class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none resize-none"
+                />
+              </div>
+
+              <p
+                v-if="!(actionForm.config.crm_actions || []).length"
+                class="text-[11px] text-red-400 italic"
+              >
+                Adicione pelo menos uma ação
+              </p>
             </div>
           </template>
 

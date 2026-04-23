@@ -74,6 +74,14 @@ class Kanban::ExecuteActionService
       return log_activity('automation_skipped', reason: 'no_conversation_linked')
     end
 
+    target_inbox_id = @config['inbox_id'].present? ? @config['inbox_id'].to_i : nil
+
+    # If a different inbox is configured and new-conversation mode is enabled
+    if target_inbox_id && target_inbox_id != conversation.inbox_id && @config['open_new_conversation']
+      conversation = open_conversation_in_inbox(target_inbox_id, conversation)
+      return unless conversation
+    end
+
     unless conversation.inbox.channel_type == 'Channel::Whatsapp'
       @execution.update!(result: { error: 'not_whatsapp_channel' })
       return log_activity('automation_skipped', reason: 'not_whatsapp_channel')
@@ -88,6 +96,42 @@ class Kanban::ExecuteActionService
       @execution.update!(status: 'skipped', executed_at: Time.current, result: { error: 'outside_business_hours' })
       log_activity('automation_skipped', reason: 'outside_business_hours')
     end
+  end
+
+  def open_conversation_in_inbox(inbox_id, existing_conversation)
+    inbox = Inbox.find_by(id: inbox_id, account_id: @item.account_id)
+    return existing_conversation unless inbox
+
+    contact = existing_conversation.contact || @item.contact
+    return existing_conversation unless contact
+
+    contact_inbox = ContactInbox.find_or_create_by!(contact: contact, inbox: inbox)
+    new_conv = Conversation.create!(
+      account:          @item.account,
+      inbox:            inbox,
+      contact:          contact,
+      contact_inbox:    contact_inbox,
+      status:           :open
+    )
+
+    if @config['new_conv_same_card']
+      @item.update!(conversation_id: new_conv.id)
+      log_activity('automation_new_conv_linked', conversation_id: new_conv.id, inbox_id: inbox_id)
+    elsif @config['new_conv_pipeline_id'].present? && @config['new_conv_stage_id'].present?
+      new_item = KanbanItem.create!(
+        account_id:    @item.account_id,
+        pipeline_id:   @config['new_conv_pipeline_id'].to_i,
+        stage_id:      @config['new_conv_stage_id'].to_i,
+        title:         @item.title,
+        contact_phone: @item.contact_phone,
+        assignee_id:   @item.assignee_id,
+        contact:       contact,
+        conversation_id: new_conv.id
+      )
+      log_activity('automation_new_item_for_conv', new_item_id: new_item.id, conversation_id: new_conv.id)
+    end
+
+    new_conv
   end
 
   def inside_business_hours?
@@ -259,6 +303,111 @@ class Kanban::ExecuteActionService
       parts = $1.split('.')
       val = parts.reduce(vars) { |h, k| h.is_a?(Hash) ? h[k] : nil }
       val.nil? ? "{{#{$1}}}" : val.to_s
+    end
+  end
+
+  # ── CRM Action ──────────────────────────────────────────────────────────────
+
+  def execute_crm_action
+    unless crm_conditions_match?
+      log_activity('automation_crm_skipped', reason: 'conditions_not_met')
+      @execution.update!(result: { skipped: 'conditions_not_met' })
+      return
+    end
+
+    executed = []
+    (@config['crm_actions'] || []).each do |action|
+      run_crm_sub_action(action.with_indifferent_access, executed)
+    end
+
+    log_activity('automation_crm_executed', actions: executed)
+    @execution.update!(result: { executed_actions: executed })
+  end
+
+  def crm_conditions_match?
+    conditions = @config['conditions'] || []
+    return true if conditions.empty?
+
+    logic   = (@config['condition_logic'] || 'AND').upcase
+    results = conditions.map { |c| evaluate_crm_condition(c.with_indifferent_access) }
+    logic == 'AND' ? results.all? : results.any?
+  end
+
+  def evaluate_crm_condition(cond)
+    attr  = cond['attribute'].to_s
+    value = cond['value'].to_s
+
+    case attr
+    when 'lead_in_pipeline'     then @item.pipeline_id.to_s == value
+    when 'lead_in_stage'        then @item.stage_id.to_s == value
+    when 'lead_in_pipeline_and_stage'
+      pid, sid = value.split(':')
+      @item.pipeline_id.to_s == pid && @item.stage_id.to_s == sid
+    when 'lead_assignee'        then @item.assignee_id.to_s == value
+    when 'lead_status'          then @item.status == value
+    when 'lead_has_pending_task'
+      has_pending = @item.kanban_tasks.pending.exists?
+      value == 'true' ? has_pending : !has_pending
+    when 'lead_has_conversation'
+      has_conv = @item.conversation_id.present?
+      value == 'true' ? has_conv : !has_conv
+    when 'lead_has_lost_reason' then @item.lost_reason_id.to_s == value
+    when 'conversation_inbox'
+      conv = Conversation.find_by(id: @item.conversation_id)
+      conv&.inbox_id.to_s == value
+    when 'conversation_label'
+      conv = Conversation.find_by(id: @item.conversation_id)
+      conv&.cached_label_list_array&.include?(value) || false
+    else true
+    end
+  end
+
+  def run_crm_sub_action(action, executed)
+    case action['type']
+    when 'move_item'
+      stage_id    = action['stage_id']&.to_i
+      pipeline_id = action['pipeline_id']&.to_i
+      return unless stage_id&.positive?
+
+      attrs = { stage_id: stage_id }
+      attrs[:pipeline_id] = pipeline_id if pipeline_id&.positive?
+      @item.update!(attrs)
+      executed << { type: 'move_item', stage_id: stage_id }
+      log_activity('automation_crm_moved', stage_id: stage_id, pipeline_id: pipeline_id)
+
+    when 'assign_agent'
+      agent_id = action['agent_id']&.to_i
+      return unless agent_id&.positive?
+
+      @item.update!(assignee_id: agent_id)
+      executed << { type: 'assign_agent', agent_id: agent_id }
+      log_activity('automation_crm_assigned', agent_id: agent_id)
+
+    when 'add_note'
+      content = action['content'].to_s.strip
+      return if content.blank?
+
+      @item.kanban_notes.create!(content: content, author: nil)
+      executed << { type: 'add_note' }
+      log_activity('automation_crm_note_added', preview: content.first(80))
+
+    when 'create_item'
+      pipeline_id = action['pipeline_id']&.to_i
+      stage_id    = action['stage_id']&.to_i
+      return unless pipeline_id&.positive? && stage_id&.positive?
+
+      title = action['title'].presence || @item.title
+      new_item = KanbanItem.create!(
+        account_id:    @item.account_id,
+        pipeline_id:   pipeline_id,
+        stage_id:      stage_id,
+        title:         title,
+        contact_phone: @item.contact_phone,
+        assignee_id:   @item.assignee_id,
+        contact:       @item.contact
+      )
+      executed << { type: 'create_item', new_item_id: new_item.id }
+      log_activity('automation_crm_item_created', new_item_id: new_item.id, title: title)
     end
   end
 

@@ -45,5 +45,8 @@ else
   json.lost_reason nil
 end
 
+label_names = item.conversation&.cached_label_list_array || []
+json.conversation_labels label_names
+
 json.created_at item.created_at.to_i
 json.updated_at item.updated_at.to_i
