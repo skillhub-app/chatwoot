@@ -7,33 +7,41 @@ on:
 
 jobs:
   deploy:
-    name: Deploy via SSH
+    name: Build & Deploy
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to VPS
+      - name: Build Docker image
+        run: |
+          docker build -f docker/Dockerfile -t volps/chatwoot:latest .
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Transfer image to VPS
+        run: |
+          docker save volps/chatwoot:latest | gzip | \
+            ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+              ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+              "docker load"
+
+      - name: Deploy and migrate on VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
-          command_timeout: 30m
+          command_timeout: 15m
           script: |
             set -e
-            REPO=/opt/volps/chatwoot/repo
-            STACK_DIR=/opt/volps/chatwoot
-
-            echo "=== Pulling latest code ==="
-            cd "$REPO"
-            git fetch origin main
-            git reset --hard origin/main
-
-            echo "=== Building Docker image ==="
-            docker build -f docker/Dockerfile -t volps/chatwoot:latest .
 
             echo "=== Deploying stack (force update to pick up new image) ==="
             docker service update --force --image volps/chatwoot:latest chatwoot_rails
@@ -42,13 +50,11 @@ jobs:
             echo "=== Waiting for new rails container to be running ==="
             MIGRATED=0
             for i in $(seq 1 24); do
-              # Use 'docker service ps' to get the current running task ID
               TASK_ID=$(docker service ps chatwoot_rails \
                 --filter desired-state=running \
                 --format "{{.ID}}" 2>/dev/null | head -1)
 
               if [ -n "$TASK_ID" ]; then
-                # Get the container ID from the task
                 CONTAINER_ID=$(docker inspect "$TASK_ID" \
                   --format '{{.Status.ContainerStatus.ContainerID}}' 2>/dev/null | head -c 12)
 
