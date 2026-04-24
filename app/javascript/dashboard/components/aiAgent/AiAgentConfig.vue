@@ -1,6 +1,6 @@
 <!-- eslint-disable vue/no-bare-strings-in-template, prettier/prettier -->
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { useStore } from 'vuex';
 import aiAgentsAPI from '../../api/aiAgents';
 import AiAgentProtocols from './AiAgentProtocols.vue';
@@ -26,13 +26,24 @@ const TIMEZONES = [
   'UTC',
 ];
 
-const LLM_MODELS = [
-  { value: 'gpt-4o', label: 'GPT-4o' },
-  { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-  { value: 'claude-opus-4-7', label: 'Claude Opus 4' },
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4' },
-];
+const LLM_MODELS_BY_PROVIDER = {
+  openai: [
+    { value: 'gpt-4o', label: 'GPT-4o' },
+    { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+  ],
+  anthropic: [
+    { value: 'claude-opus-4-7', label: 'Claude Opus 4' },
+    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4' },
+    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+  ],
+  gemini: [
+    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+    { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite' },
+    { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+    { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+  ],
+};
 
 const inboxes = ref(store.getters['inboxes/getInboxes'] || []);
 
@@ -50,6 +61,8 @@ const form = ref({
   tts_enabled: props.agent.tts_enabled,
   tts_voice_id: props.agent.tts_voice_id || '',
   tts_api_key_encrypted: '',
+  reactivation_command: props.agent.reactivation_command || '/ia',
+  message_chunk_size: props.agent.message_chunk_size || 300,
 });
 
 watch(
@@ -69,8 +82,14 @@ watch(
       tts_enabled: a.tts_enabled,
       tts_voice_id: a.tts_voice_id || '',
       tts_api_key_encrypted: '',
+      reactivation_command: a.reactivation_command || '/ia',
+      message_chunk_size: a.message_chunk_size || 300,
     };
   }
+);
+
+const llmModels = computed(
+  () => LLM_MODELS_BY_PROVIDER[form.value.llm_provider] || LLM_MODELS_BY_PROVIDER.openai
 );
 
 async function save() {
@@ -212,12 +231,13 @@ const labelClass =
           <select v-model="form.llm_provider" :class="inputClass">
             <option value="openai">OpenAI</option>
             <option value="anthropic">Anthropic</option>
+            <option value="gemini">Google Gemini</option>
           </select>
         </div>
         <div>
           <label :class="labelClass">Modelo</label>
           <select v-model="form.llm_model" :class="inputClass">
-            <option v-for="m in LLM_MODELS" :key="m.value" :value="m.value">
+            <option v-for="m in llmModels" :key="m.value" :value="m.value">
               {{ m.label }}
             </option>
           </select>
@@ -234,6 +254,47 @@ const labelClass =
           :class="inputClass"
           autocomplete="off"
         />
+      </div>
+    </div>
+
+    <!-- Comportamento -->
+    <div :class="sectionClass">
+      <h3
+        class="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2"
+      >
+        <span class="i-lucide-sliders-horizontal size-4 text-violet-500" />
+        Comportamento
+      </h3>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label :class="labelClass">Comando de reativação da IA</label>
+          <input
+            v-model="form.reactivation_command"
+            type="text"
+            placeholder="/ia"
+            :class="inputClass"
+          />
+          <p class="text-[11px] text-slate-400 mt-1">
+            Operadores enviam este comando para reativar o agente após pausa
+            manual.
+          </p>
+        </div>
+        <div>
+          <label :class="labelClass"
+            >Tamanho do chunk de mensagem (chars)</label
+          >
+          <input
+            v-model.number="form.message_chunk_size"
+            type="number"
+            min="50"
+            max="2000"
+            step="50"
+            :class="inputClass"
+          />
+          <p class="text-[11px] text-slate-400 mt-1">
+            Mensagens longas são divididas em partes aproximadas deste tamanho.
+          </p>
+        </div>
       </div>
     </div>
 

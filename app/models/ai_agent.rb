@@ -23,6 +23,14 @@ class AiAgent < ApplicationRecord
       prompt:     new_prompt,
       created_by: user
     )
-    update!(prompt: new_prompt, prompt_version: new_version)
+    update!(prompt: new_prompt, prompt_version: new_version, prompt_draft: {})
+  end
+
+  def save_draft!(draft_prompt)
+    update!(prompt_draft: draft_prompt)
+  end
+
+  def has_draft?
+    prompt_draft.present? && prompt_draft.any?
   end
 end

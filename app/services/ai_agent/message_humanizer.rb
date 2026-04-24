@@ -27,8 +27,26 @@ class AiAgent::MessageHumanizer
   private
 
   def split_into_chunks(text)
+    chunk_size = @agent&.message_chunk_size.to_i
+    chunk_size = 300 if chunk_size < 50
+
     paragraphs = text.split(/\n{2,}/).map(&:strip).reject(&:blank?)
-    paragraphs.size > 1 ? paragraphs : [text]
+    return [text] unless paragraphs.size > 1
+
+    result = []
+    buffer = ''
+    paragraphs.each do |para|
+      if buffer.empty?
+        buffer = para
+      elsif (buffer.length + para.length) < chunk_size
+        buffer = "#{buffer}\n\n#{para}"
+      else
+        result << buffer
+        buffer = para
+      end
+    end
+    result << buffer unless buffer.empty?
+    result
   end
 
   def typing_delay(chunk)

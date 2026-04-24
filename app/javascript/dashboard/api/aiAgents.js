@@ -30,6 +30,31 @@ class AiAgentsAPI extends ApiClient {
     return axios.post(`${this.url}/${id}/publish_prompt`, { prompt });
   }
 
+  saveDraft(id, prompt) {
+    return axios.patch(`${this.url}/${id}/save_draft`, { prompt });
+  }
+
+  playground(id, messages, useDraft = false) {
+    return axios.post(`${this.url}/${id}/playground`, {
+      messages,
+      use_draft: useDraft,
+    });
+  }
+
+  promptAssistant(id) {
+    return axios.post(`${this.url}/${id}/prompt_assistant`);
+  }
+
+  exportAgent(id) {
+    return axios.get(`${this.url}/${id}/export`, { responseType: 'blob' });
+  }
+
+  importAgent(agentData) {
+    return axios.post(`${this.url}/import`, {
+      agent_data: JSON.stringify(agentData),
+    });
+  }
+
   getPromptVersions(agentId) {
     return axios.get(`${this.url}/${agentId}/prompt_versions`);
   }

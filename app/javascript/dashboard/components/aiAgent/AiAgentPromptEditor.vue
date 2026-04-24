@@ -1,14 +1,18 @@
 <!-- eslint-disable vue/no-bare-strings-in-template, prettier/prettier -->
 <script setup>
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, computed, onMounted } from 'vue';
 import aiAgentsAPI from '../../api/aiAgents';
+import AiAgentAssistant from './AiAgentAssistant.vue';
 
 const props = defineProps({ agent: { type: Object, required: true } });
 const emit = defineEmits(['updated']);
 
-const saving = ref(false);
-const saved = ref(false);
-const error = ref(null);
+const saving        = ref(false);
+const saved         = ref(false);
+const draftSaving   = ref(false);
+const draftSaved    = ref(false);
+const error         = ref(null);
+const showAssistant = ref(false);
 
 const DEFAULT_PROMPT = {
   name: '',
@@ -25,12 +29,19 @@ function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
 
-const form = ref(deepClone({ ...DEFAULT_PROMPT, ...props.agent.prompt }));
+function activeSource(a) {
+  return a.has_draft && a.prompt_draft && Object.keys(a.prompt_draft).length > 0
+    ? a.prompt_draft
+    : a.prompt;
+}
+
+const form = ref(deepClone({ ...DEFAULT_PROMPT, ...activeSource(props.agent) }));
+const hasDraft = computed(() => props.agent.has_draft);
 
 watch(
   () => props.agent,
   a => {
-    form.value = deepClone({ ...DEFAULT_PROMPT, ...a.prompt });
+    form.value = deepClone({ ...DEFAULT_PROMPT, ...activeSource(a) });
   }
 );
 
@@ -97,22 +108,53 @@ function restoreVersion(v) {
 
 onMounted(loadVersions);
 
-// ── Save ─────────────────────────────────────────────────────────────────────
+// ── Save draft ───────────────────────────────────────────────────────────────
+async function saveDraft() {
+  draftSaving.value = true;
+  error.value       = null;
+  draftSaved.value  = false;
+  try {
+    const res = await aiAgentsAPI.saveDraft(props.agent.id, form.value);
+    emit('updated', res.data.payload);
+    draftSaved.value = true;
+    setTimeout(() => { draftSaved.value = false; }, 3000);
+  } catch {
+    error.value = 'Erro ao salvar rascunho.';
+  } finally {
+    draftSaving.value = false;
+  }
+}
+
+// ── Publish ───────────────────────────────────────────────────────────────────
 async function save() {
   saving.value = true;
-  error.value = null;
-  saved.value = false;
+  error.value  = null;
+  saved.value  = false;
   try {
     const res = await aiAgentsAPI.publishPrompt(props.agent.id, form.value);
     emit('updated', res.data.payload);
     saved.value = true;
-    setTimeout(() => {
-      saved.value = false;
-    }, 3000);
+    setTimeout(() => { saved.value = false; }, 3000);
   } catch {
-    error.value = 'Erro ao salvar prompt.';
+    error.value = 'Erro ao publicar prompt.';
   } finally {
     saving.value = false;
+  }
+}
+
+// ── Export ───────────────────────────────────────────────────────────────────
+async function exportAgent() {
+  try {
+    const res      = await aiAgentsAPI.exportAgent(props.agent.id);
+    const blob     = new Blob([res.data], { type: 'application/json' });
+    const url      = URL.createObjectURL(blob);
+    const a        = document.createElement('a');
+    a.href         = url;
+    a.download     = `ai-agent-${props.agent.name.toLowerCase().replace(/\s+/g, '-')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch {
+    error.value = 'Erro ao exportar agente.';
   }
 }
 
@@ -131,43 +173,99 @@ const removeBtnClass =
 
 <template>
   <div class="space-y-5">
+    <!-- Draft badge -->
+    <div
+      v-if="hasDraft && !saved"
+      class="flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-700 dark:text-amber-300"
+    >
+      <span class="i-lucide-pencil size-3.5" />
+      Editando rascunho — não publicado ainda
+    </div>
+
     <!-- Save bar -->
     <div class="flex items-center justify-between">
       <div>
         <p class="text-xs text-slate-400">
-          Versão atual do prompt:
+          Versão publicada:
           <strong class="text-slate-600 dark:text-slate-300"
             >v{{ agent.prompt_version }}</strong
           >
         </p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap justify-end">
         <span
           v-if="saved"
           class="text-xs text-emerald-500 flex items-center gap-1"
         >
-          <span class="i-lucide-check size-3.5" /> Salvo como v{{
+          <span class="i-lucide-check size-3.5" /> Publicado como v{{
             agent.prompt_version
           }}
         </span>
+        <span
+          v-if="draftSaved"
+          class="text-xs text-amber-500 flex items-center gap-1"
+        >
+          <span class="i-lucide-check size-3.5" /> Rascunho salvo
+        </span>
         <span v-if="error" class="text-xs text-red-500">{{ error }}</span>
+
+        <!-- Export -->
+        <button
+          class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          @click="exportAgent"
+        >
+          <span class="i-lucide-download size-3.5" /> Exportar
+        </button>
+
+        <!-- Assistente -->
+        <button
+          class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-400 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors"
+          @click="showAssistant = true"
+        >
+          <span class="i-lucide-sparkles size-3.5" /> Analisar
+        </button>
+
+        <!-- Histórico -->
         <button
           class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
           @click="showHistory = true"
         >
           <span class="i-lucide-history size-3.5" /> Histórico
         </button>
+
+        <!-- Salvar rascunho -->
+        <button
+          class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors disabled:opacity-50"
+          :disabled="draftSaving"
+          @click="saveDraft"
+        >
+          <span
+            v-if="draftSaving"
+            class="i-lucide-loader-2 size-3.5 animate-spin"
+          />
+          <span v-else class="i-lucide-pencil size-3.5" />
+          {{ draftSaving ? 'Salvando...' : 'Rascunho' }}
+        </button>
+
+        <!-- Publicar -->
         <button
           class="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors disabled:opacity-50"
           :disabled="saving"
           @click="save"
         >
           <span v-if="saving" class="i-lucide-loader-2 size-3.5 animate-spin" />
-          <span v-else class="i-lucide-save size-3.5" />
-          {{ saving ? 'Salvando...' : 'Publicar prompt' }}
+          <span v-else class="i-lucide-send size-3.5" />
+          {{ saving ? 'Publicando...' : 'Publicar' }}
         </button>
       </div>
     </div>
+
+    <!-- Assistente modal -->
+    <AiAgentAssistant
+      v-if="showAssistant"
+      :agent-id="agent.id"
+      @close="showAssistant = false"
+    />
 
     <!-- History modal -->
     <div
@@ -576,15 +674,27 @@ const removeBtnClass =
     </div>
 
     <!-- Save bottom -->
-    <div class="flex justify-end pt-2">
+    <div class="flex justify-end gap-2 pt-2">
+      <button
+        class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors disabled:opacity-50"
+        :disabled="draftSaving"
+        @click="saveDraft"
+      >
+        <span
+          v-if="draftSaving"
+          class="i-lucide-loader-2 size-3.5 animate-spin"
+        />
+        <span v-else class="i-lucide-pencil size-3.5" />
+        {{ draftSaving ? 'Salvando...' : 'Salvar rascunho' }}
+      </button>
       <button
         class="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors disabled:opacity-50"
         :disabled="saving"
         @click="save"
       >
         <span v-if="saving" class="i-lucide-loader-2 size-3.5 animate-spin" />
-        <span v-else class="i-lucide-save size-3.5" />
-        {{ saving ? 'Salvando...' : 'Publicar prompt' }}
+        <span v-else class="i-lucide-send size-3.5" />
+        {{ saving ? 'Publicando...' : 'Publicar' }}
       </button>
     </div>
   </div>

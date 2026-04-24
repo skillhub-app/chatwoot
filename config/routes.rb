@@ -108,7 +108,14 @@ Rails.application.routes.draw do
             end
           end
           resources :ai_agents, only: [:index, :show, :create, :update, :destroy] do
-            member { post :publish_prompt }
+            collection { post :import }
+            member do
+              post  :publish_prompt
+              patch :save_draft
+              post  :playground
+              post  :prompt_assistant
+              get   :export
+            end
             resources :faqs, only: [:index, :create, :update, :destroy],
                              controller: 'ai_agent_faqs' do
               collection { post :import }

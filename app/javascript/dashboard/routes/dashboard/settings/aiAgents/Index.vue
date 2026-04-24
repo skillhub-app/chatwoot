@@ -5,6 +5,9 @@ import { useRouter } from 'vue-router';
 import { useStore } from 'vuex';
 import aiAgentsAPI from '../../../../api/aiAgents';
 
+const importInput = ref(null);
+const importErr   = ref(null);
+
 const router = useRouter();
 const store = useStore();
 const agents = ref([]);
@@ -88,6 +91,24 @@ function goToAgent(id) {
   router.push({ name: 'ai_agents_detail', params: { agentId: id } });
 }
 
+async function handleImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  importErr.value = null;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    const res  = await aiAgentsAPI.importAgent(data);
+    const agent = res.data?.payload;
+    agents.value.unshift(agent);
+    router.push({ name: 'ai_agents_detail', params: { agentId: agent.id } });
+  } catch (err) {
+    importErr.value = err.response?.data?.error || 'Erro ao importar agente.';
+  } finally {
+    e.target.value = '';
+  }
+}
+
 async function toggleActive(agent) {
   try {
     const res = await aiAgentsAPI.update(agent.id, { active: !agent.active });
@@ -111,13 +132,30 @@ async function toggleActive(agent) {
           Configure agentes de IA para atendimento automático por inbox
         </p>
       </div>
-      <button
-        class="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors"
-        @click="openCreate"
-      >
-        <span class="i-lucide-plus size-3.5" />
-        Novo Agente
-      </button>
+      <div class="flex items-center gap-2">
+        <span v-if="importErr" class="text-xs text-red-500">{{
+          importErr
+        }}</span>
+        <label
+          class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+        >
+          <span class="i-lucide-upload size-3.5" /> Importar
+          <input
+            ref="importInput"
+            type="file"
+            accept=".json,application/json"
+            class="hidden"
+            @change="handleImport"
+          />
+        </label>
+        <button
+          class="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors"
+          @click="openCreate"
+        >
+          <span class="i-lucide-plus size-3.5" />
+          Novo Agente
+        </button>
+      </div>
     </div>
 
     <!-- Loading -->

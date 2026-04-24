@@ -1,6 +1,7 @@
 class AiAgent::LlmService
   OPENAI_URL    = 'https://api.openai.com/v1/chat/completions'
   ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
+  GEMINI_URL    = 'https://generativelanguage.googleapis.com/v1beta/models'
 
   def self.call(agent, prompt)
     new(agent, prompt).call
@@ -14,6 +15,7 @@ class AiAgent::LlmService
   def call
     case @agent.llm_provider
     when 'anthropic' then call_anthropic
+    when 'gemini'    then call_gemini
     else call_openai
     end
   end
@@ -71,5 +73,33 @@ class AiAgent::LlmService
     raise "Anthropic error: #{response.body}" unless response.success?
 
     response.body.dig('content', 0, 'text').to_s.strip
+  end
+
+  def call_gemini
+    url  = "#{GEMINI_URL}/#{@agent.llm_model}:generateContent"
+    conn = Faraday.new do |f|
+      f.request :json
+      f.response :json
+      f.options.timeout = 60
+    end
+
+    contents = @prompt[:messages].map do |m|
+      role = m[:role] == 'assistant' ? 'model' : 'user'
+      { role: role, parts: [{ text: m[:content].to_s }] }
+    end
+
+    response = conn.post(url) do |req|
+      req.headers['Content-Type'] = 'application/json'
+      req.params['key']           = api_key
+      req.body = {
+        system_instruction: { parts: [{ text: @prompt[:system].to_s }] },
+        contents:           contents,
+        generationConfig:   { temperature: 0.7, maxOutputTokens: 2000 }
+      }
+    end
+
+    raise "Gemini error: #{response.body}" unless response.success?
+
+    response.body.dig('candidates', 0, 'content', 'parts', 0, 'text').to_s.strip
   end
 end
