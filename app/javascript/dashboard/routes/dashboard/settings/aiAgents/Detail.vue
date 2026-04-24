@@ -8,7 +8,6 @@ import AiAgentConfig from '../../../../components/aiAgent/AiAgentConfig.vue';
 import AiAgentFaq from '../../../../components/aiAgent/AiAgentFaq.vue';
 import AiAgentSchedule from '../../../../components/aiAgent/AiAgentSchedule.vue';
 import AiAgentMetrics from '../../../../components/aiAgent/AiAgentMetrics.vue';
-import AiAgentPlayground from '../../../../components/aiAgent/AiAgentPlayground.vue';
 
 const route  = useRoute();
 const router = useRouter();
@@ -22,7 +21,6 @@ const TABS = [
   { id: 'training',    label: 'Treinamento',        icon: 'i-lucide-brain' },
   { id: 'config',      label: 'Configurações',      icon: 'i-lucide-settings-2' },
   { id: 'schedule',    label: 'Agendamento',        icon: 'i-lucide-calendar' },
-  { id: 'playground',  label: 'Playground',         icon: 'i-lucide-flask-conical' },
   { id: 'metrics',     label: 'Métricas',           icon: 'i-lucide-bar-chart-2' },
 ];
 
@@ -139,11 +137,6 @@ async function exportAgent() {
       <AiAgentSchedule
         v-else-if="activeTab === 'schedule'"
         :agent-id="agentId"
-      />
-
-      <AiAgentPlayground
-        v-else-if="activeTab === 'playground'"
-        :agent="agent"
       />
 
       <AiAgentMetrics v-else-if="activeTab === 'metrics'" :agent-id="agentId" />

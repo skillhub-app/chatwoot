@@ -72,6 +72,28 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
     @inbox.channel.reset_secret!
   end
 
+  def uazapi_qr
+    return head :not_found unless @inbox.channel.is_a?(Channel::Uazapi)
+
+    data = @inbox.channel.api.get_qr_code
+    render json: { base64: data['base64'] || data['qrcode'] }
+  rescue StandardError => e
+    render json: { error: e.message }, status: :unprocessable_entity
+  end
+
+  def uazapi_status
+    return head :not_found unless @inbox.channel.is_a?(Channel::Uazapi)
+
+    data = @inbox.channel.api.instance_info
+    instances = data.is_a?(Array) ? data : [data]
+    info = instances.find { |i| i['instanceName'] == @inbox.channel.uazapi_instance_name } || {}
+    status = info.dig('connectionStatus') || info.dig('instance', 'connectionStatus') || 'unknown'
+    @inbox.channel.update_columns(connection_status: status) if status != 'unknown'
+    render json: { connection_status: status }
+  rescue StandardError => e
+    render json: { connection_status: 'unknown', error: e.message }
+  end
+
   def destroy
     ::DeleteObjectJob.perform_later(@inbox, Current.user, request.ip) if @inbox.present?
     render status: :ok, json: { message: I18n.t('messages.inbox_deletetion_response') }
@@ -95,7 +117,7 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
   end
 
   def allowed_channel_types
-    %w[web_widget api email line telegram whatsapp sms]
+    %w[web_widget api email line telegram whatsapp sms uazapi]
   end
 
   def update_inbox_working_hours
@@ -177,7 +199,8 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
       'line' => Channel::Line,
       'telegram' => Channel::Telegram,
       'whatsapp' => Channel::Whatsapp,
-      'sms' => Channel::Sms
+      'sms' => Channel::Sms,
+      'uazapi' => Channel::Uazapi
     }[permitted_params[:channel][:type]]
   end
 

@@ -11,6 +11,7 @@ import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 
 import AccordionItem from 'dashboard/components/Accordion/AccordionItem.vue';
 import KanbanCRMWidget from 'dashboard/components/kanban/KanbanCRMWidget.vue';
+import AiAgentToggle from 'dashboard/components/aiAgent/AiAgentToggle.vue';
 import ContactConversations from './ContactConversations.vue';
 import ConversationAction from './ConversationAction.vue';
 import ConversationParticipant from './ConversationParticipant.vue';
@@ -154,6 +155,9 @@ onMounted(() => {
             v-if="element.name === 'conversation_actions'"
             class="conversation--actions"
           >
+            <!-- AI Agent On/Off toggle -->
+            <AiAgentToggle :conversation-id="conversationId" class="mb-2" />
+
             <!-- Kanban CRM Widget — always visible at top -->
             <AccordionItem
               :title="$t('CONVERSATION_SIDEBAR.ACCORDION.KANBAN_CRM')"

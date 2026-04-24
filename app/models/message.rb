@@ -331,6 +331,19 @@ class Message < ApplicationRecord
     execute_message_template_hooks
     update_contact_activity
     AiAgent::IncomingMessageProcessor.call(self)
+    pause_ai_on_human_response
+  end
+
+  def pause_ai_on_human_response
+    return unless human_response?
+    return unless conversation.label_list.include?('ia_ligada')
+
+    current_labels = conversation.label_list.to_a
+    current_labels.delete('ia_ligada')
+    current_labels |= ['ia_desligada']
+    conversation.update!(label_list: current_labels)
+  rescue StandardError => e
+    Rails.logger.error "pause_ai_on_human_response error: #{e.message}"
   end
 
   def update_contact_activity

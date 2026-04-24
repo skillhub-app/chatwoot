@@ -314,6 +314,8 @@ Rails.application.routes.draw do
             get :health, on: :member
             post :register_webhook, on: :member
             post :reset_secret, on: :member
+            get  :uazapi_qr, on: :member
+            get  :uazapi_status, on: :member
             if ChatwootApp.enterprise?
               resource :conference, only: %i[create destroy], controller: 'conference' do
                 get :token, on: :member
@@ -666,6 +668,7 @@ Rails.application.routes.draw do
   post 'webhooks/instagram', to: 'webhooks/instagram#events'
   post 'webhooks/tiktok', to: 'webhooks/tiktok#events'
   post 'webhooks/shopify', to: 'webhooks/shopify#events'
+  post 'webhooks/uazapi/:identifier', to: 'webhooks/uazapi#process_payload'
 
   namespace :twitter do
     resource :callback, only: [:show]

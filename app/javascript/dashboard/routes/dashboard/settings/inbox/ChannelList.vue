@@ -89,6 +89,13 @@ const channelList = computed(() => {
   }
 
   channels.push({
+    key: 'uazapi',
+    title: 'WhatsApp UAZAPI',
+    description: 'WhatsApp não oficial via UAZAPI',
+    icon: 'i-woot-whatsapp',
+  });
+
+  channels.push({
     key: 'voice',
     title: t('INBOX_MGMT.ADD.AUTH.CHANNEL.VOICE.TITLE'),
     description: t('INBOX_MGMT.ADD.AUTH.CHANNEL.VOICE.DESCRIPTION'),

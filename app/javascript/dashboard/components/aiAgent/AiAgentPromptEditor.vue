@@ -4,6 +4,7 @@ import { ref, watch, computed, onMounted } from 'vue';
 import aiAgentsAPI from '../../api/aiAgents';
 import AiAgentAssistant from './AiAgentAssistant.vue';
 import AiAgentVersionDiff from './AiAgentVersionDiff.vue';
+import AiAgentPlayground from './AiAgentPlayground.vue';
 
 const props = defineProps({ agent: { type: Object, required: true } });
 const emit = defineEmits(['updated']);
@@ -168,6 +169,34 @@ async function exportAgent() {
   }
 }
 
+// ── Import prompt ────────────────────────────────────────────────────────────
+const importFileRef = ref(null);
+
+function triggerImportPrompt() {
+  importFileRef.value?.click();
+}
+
+function onImportFileChange(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const json = JSON.parse(e.target.result);
+      const promptData = json.agent?.prompt || json.prompt || json;
+      form.value = deepClone({ ...DEFAULT_PROMPT, ...promptData });
+      error.value = null;
+    } catch {
+      error.value = 'Arquivo inválido. Use um JSON exportado de um agente.';
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ── Playground section ───────────────────────────────────────────────────────
+const showPlayground = ref(false);
+
 const inputClass =
   'w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30';
 const textareaClass = inputClass + ' resize-none';
@@ -219,6 +248,21 @@ const removeBtnClass =
         </span>
         <span v-if="error" class="text-xs text-red-500">{{ error }}</span>
 
+        <!-- Import prompt (hidden file input) -->
+        <input
+          ref="importFileRef"
+          type="file"
+          accept=".json,application/json"
+          class="hidden"
+          @change="onImportFileChange"
+        />
+        <button
+          class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          @click="triggerImportPrompt"
+        >
+          <span class="i-lucide-upload size-3.5" /> Importar prompt
+        </button>
+
         <!-- Export -->
         <button
           class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
@@ -255,6 +299,19 @@ const removeBtnClass =
           />
           <span v-else class="i-lucide-pencil size-3.5" />
           {{ draftSaving ? 'Salvando...' : 'Rascunho' }}
+        </button>
+
+        <!-- Playground toggle -->
+        <button
+          class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border rounded-lg transition-colors"
+          :class="
+            showPlayground
+              ? 'border-emerald-400 text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700 dark:text-emerald-400'
+              : 'border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
+          "
+          @click="showPlayground = !showPlayground"
+        >
+          <span class="i-lucide-flask-conical size-3.5" /> Playground
         </button>
 
         <!-- Publicar -->
@@ -715,6 +772,20 @@ const removeBtnClass =
       <p v-if="!form.flow.length" class="text-xs text-slate-400 italic">
         Nenhuma etapa de conversão definida
       </p>
+    </div>
+
+    <!-- Playground section -->
+    <div v-if="showPlayground" :class="sectionClass">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="i-lucide-flask-conical size-4 text-emerald-500" />
+        <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">
+          Playground
+        </h3>
+        <span class="text-[11px] text-slate-400"
+          >— teste o agente antes de publicar</span
+        >
+      </div>
+      <AiAgentPlayground :agent="agent" />
     </div>
 
     <!-- Save bottom -->

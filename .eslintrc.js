@@ -39,6 +39,8 @@ module.exports = {
         'app/javascript/dashboard/components/aiAgent/**/*.vue',
         'app/javascript/dashboard/routes/dashboard/settings/aiAgents/**/*.{js,vue}',
         'app/javascript/dashboard/api/aiAgents.js',
+        'app/javascript/dashboard/routes/dashboard/settings/inbox/channels/Uazapi.vue',
+        'app/javascript/dashboard/routes/dashboard/conversation/ContactPanel.vue',
       ],
       rules: {
         'vue/no-bare-strings-in-template': 'off',

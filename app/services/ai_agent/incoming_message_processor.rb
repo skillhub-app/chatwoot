@@ -30,6 +30,7 @@ class AiAgent::IncomingMessageProcessor
     return false if @message.private?
     return false if @message.content_type == 'activity'
     return false if message_content.blank?
+    return false if @conversation.label_list.include?('ia_desligada')
 
     @agent = ::AiAgent.find_by(inbox: @inbox, active: true)
     return false unless @agent
