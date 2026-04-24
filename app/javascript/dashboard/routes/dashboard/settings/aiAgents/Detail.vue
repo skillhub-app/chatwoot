@@ -5,6 +5,9 @@ import { useRoute, useRouter } from 'vue-router';
 import aiAgentsAPI from '../../../../api/aiAgents';
 import AiAgentPromptEditor from '../../../../components/aiAgent/AiAgentPromptEditor.vue';
 import AiAgentConfig from '../../../../components/aiAgent/AiAgentConfig.vue';
+import AiAgentFaq from '../../../../components/aiAgent/AiAgentFaq.vue';
+import AiAgentSchedule from '../../../../components/aiAgent/AiAgentSchedule.vue';
+import AiAgentMetrics from '../../../../components/aiAgent/AiAgentMetrics.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -14,10 +17,11 @@ const loading = ref(true);
 const activeTab = ref('prompt');
 
 const TABS = [
-  { id: 'prompt', label: 'Editor de Prompt', icon: 'i-lucide-file-text' },
-  { id: 'training', label: 'Treinamento', icon: 'i-lucide-brain' },
-  { id: 'config', label: 'Configurações', icon: 'i-lucide-settings-2' },
-  { id: 'schedule', label: 'Agendamento', icon: 'i-lucide-calendar' },
+  { id: 'prompt',   label: 'Editor de Prompt', icon: 'i-lucide-file-text' },
+  { id: 'training', label: 'Treinamento',       icon: 'i-lucide-brain' },
+  { id: 'config',   label: 'Configurações',     icon: 'i-lucide-settings-2' },
+  { id: 'schedule', label: 'Agendamento',       icon: 'i-lucide-calendar' },
+  { id: 'metrics',  label: 'Métricas',          icon: 'i-lucide-bar-chart-2' },
 ];
 
 const agentId = computed(() => Number(route.params.agentId));
@@ -96,19 +100,8 @@ function onAgentUpdated(updated) {
         @updated="onAgentUpdated"
       />
 
-      <!-- Treinamento (Fase 2) -->
-      <div
-        v-else-if="activeTab === 'training'"
-        class="flex flex-col items-center justify-center py-20 text-center"
-      >
-        <span
-          class="i-lucide-brain size-10 text-slate-200 dark:text-slate-700 mb-3"
-        />
-        <p class="text-sm text-slate-500 font-medium">Treinamento — Fase 2</p>
-        <p class="text-xs text-slate-400 mt-1">
-          FAQ, objeções e embeddings em breve
-        </p>
-      </div>
+      <!-- Treinamento -->
+      <AiAgentFaq v-else-if="activeTab === 'training'" :agent-id="agentId" />
 
       <!-- Config -->
       <AiAgentConfig
@@ -117,21 +110,14 @@ function onAgentUpdated(updated) {
         @updated="onAgentUpdated"
       />
 
-      <!-- Agendamento (Fase 4) -->
-      <div
+      <!-- Agendamento -->
+      <AiAgentSchedule
         v-else-if="activeTab === 'schedule'"
-        class="flex flex-col items-center justify-center py-20 text-center"
-      >
-        <span
-          class="i-lucide-calendar size-10 text-slate-200 dark:text-slate-700 mb-3"
-        />
-        <p class="text-sm text-slate-500 font-medium">
-          Google Calendar — Fase 4
-        </p>
-        <p class="text-xs text-slate-400 mt-1">
-          Integração de agendamento em breve
-        </p>
-      </div>
+        :agent-id="agentId"
+      />
+
+      <!-- Métricas -->
+      <AiAgentMetrics v-else-if="activeTab === 'metrics'" :agent-id="agentId" />
     </template>
   </div>
 </template>

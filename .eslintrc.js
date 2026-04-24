@@ -46,6 +46,7 @@ module.exports = {
         'vue/no-static-inline-styles': 'off',
         'max-classes-per-file': 'off',
         'no-plusplus': 'off',
+        'no-alert': 'off',
         // prettier formats multi-line text content which conflicts with these rules
         'vue/html-closing-bracket-newline': 'off',
         'vue/max-attributes-per-line': 'off',

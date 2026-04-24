@@ -18,4 +18,12 @@ class AiAgentConversation < ApplicationRecord
   def resume!
     update!(state: 'active', paused_reason: nil)
   end
+
+  def transfer!(reason: nil)
+    update!(state: 'transferred', paused_reason: reason)
+  end
+
+  def end!
+    update!(state: 'ended')
+  end
 end

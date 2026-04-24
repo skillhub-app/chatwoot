@@ -1,6 +1,6 @@
 <!-- eslint-disable vue/no-bare-strings-in-template, prettier/prettier -->
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import aiAgentsAPI from '../../api/aiAgents';
 
 const props = defineProps({ agent: { type: Object, required: true } });
@@ -81,6 +81,22 @@ function removeBranch(step, i) {
   step.branches.splice(i, 1);
 }
 
+// ── Prompt History ───────────────────────────────────────────────────────────
+const versions = ref([]);
+const showHistory = ref(false);
+
+async function loadVersions() {
+  const { data } = await aiAgentsAPI.getPromptVersions(props.agent.id);
+  versions.value = data.payload;
+}
+
+function restoreVersion(v) {
+  form.value = deepClone({ ...DEFAULT_PROMPT, ...v.prompt });
+  showHistory.value = false;
+}
+
+onMounted(loadVersions);
+
 // ── Save ─────────────────────────────────────────────────────────────────────
 async function save() {
   saving.value = true;
@@ -136,6 +152,12 @@ const removeBtnClass =
         </span>
         <span v-if="error" class="text-xs text-red-500">{{ error }}</span>
         <button
+          class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          @click="showHistory = true"
+        >
+          <span class="i-lucide-history size-3.5" /> Histórico
+        </button>
+        <button
           class="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors disabled:opacity-50"
           :disabled="saving"
           @click="save"
@@ -144,6 +166,48 @@ const removeBtnClass =
           <span v-else class="i-lucide-save size-3.5" />
           {{ saving ? 'Salvando...' : 'Publicar prompt' }}
         </button>
+      </div>
+    </div>
+
+    <!-- History modal -->
+    <div
+      v-if="showHistory"
+      class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      @click.self="showHistory = false"
+    >
+      <div
+        class="bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-md p-6 flex flex-col gap-3 max-h-[80vh] overflow-y-auto"
+      >
+        <h3 class="text-base font-semibold text-slate-800 dark:text-slate-100">
+          Histórico de versões
+        </h3>
+        <div
+          v-if="versions.length === 0"
+          class="text-sm text-slate-400 text-center py-6"
+        >
+          Nenhuma versão salva ainda.
+        </div>
+        <div
+          v-for="v in versions"
+          :key="v.id"
+          class="border border-slate-200 dark:border-slate-700 rounded-lg p-3 flex items-center justify-between gap-3"
+        >
+          <div>
+            <p class="text-sm font-medium text-slate-700 dark:text-slate-200">
+              v{{ v.version }}
+            </p>
+            <p class="text-xs text-slate-400">
+              {{ v.created_by || 'Sistema' }} —
+              {{ new Date(v.created_at).toLocaleString('pt-BR') }}
+            </p>
+          </div>
+          <button
+            class="text-xs px-3 py-1.5 rounded border border-violet-400 text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20"
+            @click="restoreVersion(v)"
+          >
+            Restaurar
+          </button>
+        </div>
       </div>
     </div>
 

@@ -17,6 +17,7 @@
 :queues:
   - critical
   - high
+  - ai_agent
   - medium
   - default
   - mailers

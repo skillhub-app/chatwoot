@@ -3,6 +3,7 @@
 import { ref, watch } from 'vue';
 import { useStore } from 'vuex';
 import aiAgentsAPI from '../../api/aiAgents';
+import AiAgentProtocols from './AiAgentProtocols.vue';
 
 const props = defineProps({ agent: { type: Object, required: true } });
 const emit = defineEmits(['updated']);
@@ -234,6 +235,16 @@ const labelClass =
           autocomplete="off"
         />
       </div>
+    </div>
+
+    <!-- Protocols -->
+    <div :class="sectionClass">
+      <h3
+        class="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2"
+      >
+        <span class="i-lucide-git-branch size-4 text-violet-500" /> Protocolos
+      </h3>
+      <AiAgentProtocols :agent-id="agent.id" />
     </div>
 
     <!-- TTS -->

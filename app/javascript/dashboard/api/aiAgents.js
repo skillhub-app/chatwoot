@@ -29,6 +29,78 @@ class AiAgentsAPI extends ApiClient {
   publishPrompt(id, prompt) {
     return axios.post(`${this.url}/${id}/publish_prompt`, { prompt });
   }
+
+  getPromptVersions(agentId) {
+    return axios.get(`${this.url}/${agentId}/prompt_versions`);
+  }
+
+  getFaqs(agentId) {
+    return axios.get(`${this.url}/${agentId}/faqs`);
+  }
+
+  createFaq(agentId, data) {
+    return axios.post(`${this.url}/${agentId}/faqs`, { faq: data });
+  }
+
+  updateFaq(agentId, faqId, data) {
+    return axios.patch(`${this.url}/${agentId}/faqs/${faqId}`, { faq: data });
+  }
+
+  deleteFaq(agentId, faqId) {
+    return axios.delete(`${this.url}/${agentId}/faqs/${faqId}`);
+  }
+
+  importFaqs(agentId, rows) {
+    return axios.post(`${this.url}/${agentId}/faqs/import`, { rows });
+  }
+
+  getProtocols(agentId) {
+    return axios.get(`${this.url}/${agentId}/protocols`);
+  }
+
+  createProtocol(agentId, data) {
+    return axios.post(`${this.url}/${agentId}/protocols`, { protocol: data });
+  }
+
+  updateProtocol(agentId, protocolId, data) {
+    return axios.patch(`${this.url}/${agentId}/protocols/${protocolId}`, {
+      protocol: data,
+    });
+  }
+
+  deleteProtocol(agentId, protocolId) {
+    return axios.delete(`${this.url}/${agentId}/protocols/${protocolId}`);
+  }
+
+  getSchedule(agentId) {
+    return axios.get(`${this.url}/${agentId}/schedule`);
+  }
+
+  updateSchedule(agentId, data) {
+    return axios.patch(`${this.url}/${agentId}/schedule`, { schedule: data });
+  }
+
+  getGoogleAuthUrl(agentId) {
+    return axios.get(`${this.url}/${agentId}/schedule/google_auth`);
+  }
+
+  disconnectGoogle(agentId) {
+    return axios.delete(`${this.url}/${agentId}/schedule/google_disconnect`);
+  }
+
+  getAvailableSlots(agentId) {
+    return axios.get(`${this.url}/${agentId}/schedule/available_slots`);
+  }
+
+  getMetrics(period = 'week') {
+    return axios.get(`${this.url.replace('/ai_agents', '/ai_agent_metrics')}`, {
+      params: { period },
+    });
+  }
+
+  getAgentMetrics(agentId, period = 'week') {
+    return axios.get(`${this.url}/${agentId}/metrics`, { params: { period } });
+  }
 }
 
 export default new AiAgentsAPI();

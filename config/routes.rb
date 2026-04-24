@@ -109,7 +109,26 @@ Rails.application.routes.draw do
           end
           resources :ai_agents, only: [:index, :show, :create, :update, :destroy] do
             member { post :publish_prompt }
+            resources :faqs, only: [:index, :create, :update, :destroy],
+                             controller: 'ai_agent_faqs' do
+              collection { post :import }
+            end
+            resources :protocols, only: [:index, :create, :update, :destroy],
+                                  controller: 'ai_agent_protocols'
+            resources :prompt_versions, only: [:index],
+                                        controller: 'ai_agent_prompt_versions'
+            resource :schedule, only: [:show, :update],
+                                controller: 'ai_agent_schedule' do
+              collection do
+                get  :google_auth
+                get  :google_callback
+                get  :available_slots
+              end
+              member { delete :google_disconnect }
+            end
+            member { get :metrics, to: 'ai_agent_metrics#agent_stats' }
           end
+          get 'ai_agent_metrics', to: 'ai_agent_metrics#index'
           namespace :kanban do
             get 'items', to: 'global_items#index'
             scope :gamification, controller: 'gamification' do
