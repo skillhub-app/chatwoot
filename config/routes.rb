@@ -107,6 +107,9 @@ Rails.application.routes.draw do
               post :reauthorize_page
             end
           end
+          resources :ai_agents, only: [:index, :show, :create, :update, :destroy] do
+            member { post :publish_prompt }
+          end
           namespace :kanban do
             get 'items', to: 'global_items#index'
             scope :gamification, controller: 'gamification' do

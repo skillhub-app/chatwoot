@@ -29,13 +29,16 @@ module.exports = {
       },
     },
     {
-      // Kanban module uses Portuguese strings directly and :style bindings for dynamic colors
+      // Kanban and AI Agents modules use Portuguese strings directly
       files: [
         'app/javascript/dashboard/components/kanban/**/*.vue',
         'app/javascript/dashboard/routes/dashboard/kanban/**/*.{js,vue}',
         'app/javascript/dashboard/routes/dashboard/settings/reports/KanbanReports.vue',
         'app/javascript/dashboard/api/kanban.js',
         'app/javascript/dashboard/store/modules/kanban.js',
+        'app/javascript/dashboard/components/aiAgent/**/*.vue',
+        'app/javascript/dashboard/routes/dashboard/settings/aiAgents/**/*.{js,vue}',
+        'app/javascript/dashboard/api/aiAgents.js',
       ],
       rules: {
         'vue/no-bare-strings-in-template': 'off',

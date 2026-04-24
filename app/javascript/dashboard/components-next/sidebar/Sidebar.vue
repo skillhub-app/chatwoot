@@ -750,6 +750,13 @@ const menuItems = computed(() => {
           to: accountScopedRoute('billing_settings_index'),
         },
         {
+          name: 'AI Agents',
+          label: 'Agentes de IA',
+          icon: 'i-lucide-bot',
+          to: accountScopedRoute('ai_agents_index'),
+          activeOn: ['ai_agents_index', 'ai_agents_detail'],
+        },
+        {
           name: 'Kanban API',
           label: 'API do Kanban',
           icon: 'i-lucide-code-2',

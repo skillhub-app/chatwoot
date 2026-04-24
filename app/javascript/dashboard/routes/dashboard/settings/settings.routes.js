@@ -27,6 +27,7 @@ import security from './security/security.routes';
 import conversationWorkflow from './conversationWorkflow/conversationWorkflow.routes';
 import captain from './captain/captain.routes';
 import kanbanApi from './kanban/kanban-api.routes';
+import aiAgents from './aiAgents/ai-agents.routes';
 
 export default {
   routes: [
@@ -69,5 +70,6 @@ export default {
     ...conversationWorkflow.routes,
     ...captain.routes,
     ...kanbanApi.routes,
+    ...aiAgents.routes,
   ],
 };
