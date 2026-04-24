@@ -95,7 +95,7 @@ async function ensureAutomation(stage) {
       trigger_stage_id: stage.id,
       name: stage.name,
       active: true,
-      stop_on_reply: true,
+      stop_on_reply: false,
       stop_on_stage_change: true,
       stop_on_human_takeover: false,
     });
@@ -119,7 +119,7 @@ function openStopConditions(stageId) {
         stop_on_human_takeover: auto.stop_on_human_takeover,
       }
     : {
-        stop_on_reply: true,
+        stop_on_reply: false,
         stop_on_stage_change: true,
         stop_on_human_takeover: false,
       };
@@ -253,6 +253,9 @@ const CRM_CONDITION_ATTRIBUTES = [
   { value: 'lead_has_lost_reason', label: 'Motivo de perda', valueType: 'lost_reason' },
   { value: 'conversation_inbox', label: 'Caixa de entrada', valueType: 'inbox' },
   { value: 'conversation_label', label: 'Etiqueta na conversa', valueType: 'label' },
+  { value: 'conversation_status', label: 'Status da conversa', valueType: 'conversation_status' },
+  { value: 'conversation_channel', label: 'Canal da conversa', valueType: 'channel' },
+  { value: 'message_contains', label: 'Última mensagem contém', valueType: 'text' },
 ];
 
 const CRM_ACTION_TYPES = [
@@ -713,7 +716,7 @@ async function toggleActive(stage, action) {
       @click.self="closeActionForm"
     >
       <div
-        class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+        class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden"
       >
         <!-- Header -->
         <div
@@ -1241,17 +1244,12 @@ async function toggleActive(stage, action) {
                   >Responsável</label
                 >
                 <select
-                  v-model="actionForm.config.assignee_id"
+                  v-model="actionForm.config.assignee_type"
                   class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
                 >
-                  <option :value="undefined">Sem responsável</option>
-                  <option
-                    v-for="agent in agents"
-                    :key="agent.id"
-                    :value="agent.id"
-                  >
-                    {{ agent.name }}
-                  </option>
+                  <option value="">Sem responsável</option>
+                  <option value="lead_owner">Responsável atual do lead</option>
+                  <option value="specific">Agente específico</option>
                 </select>
               </div>
               <div>
@@ -1268,15 +1266,33 @@ async function toggleActive(stage, action) {
                 </select>
               </div>
             </div>
+            <div v-if="actionForm.config.assignee_type === 'specific'">
+              <label class="text-xs font-medium text-slate-500 mb-1.5 block"
+                >Agente</label
+              >
+              <select
+                v-model="actionForm.config.assignee_id"
+                class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+              >
+                <option :value="undefined">Selecionar agente</option>
+                <option
+                  v-for="agent in agents"
+                  :key="agent.id"
+                  :value="agent.id"
+                >
+                  {{ agent.name }}
+                </option>
+              </select>
+            </div>
             <div>
               <label class="text-xs font-medium text-slate-500 mb-1.5 block"
-                >Prazo (horas após entrada na etapa)</label
+                >Prazo para conclusão (minutos após agendamento)</label
               >
               <input
-                v-model.number="actionForm.config.due_hours"
+                v-model.number="actionForm.config.due_offset_minutes"
                 type="number"
                 min="0"
-                placeholder="24"
+                placeholder="Ex: 1440 = 24h"
                 class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
               />
             </div>
@@ -1543,6 +1559,48 @@ async function toggleActive(stage, action) {
                       {{ r.name }}
                     </option>
                   </select>
+
+                  <!-- Value: conversation_status -->
+                  <select
+                    v-if="
+                      conditionAttrMeta(cond.attribute).valueType ===
+                      'conversation_status'
+                    "
+                    v-model="cond.value"
+                    class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                  >
+                    <option value="open">Aberta</option>
+                    <option value="resolved">Resolvida</option>
+                    <option value="pending">Pendente</option>
+                    <option value="snoozed">Adiada</option>
+                  </select>
+
+                  <!-- Value: channel -->
+                  <select
+                    v-if="
+                      conditionAttrMeta(cond.attribute).valueType === 'channel'
+                    "
+                    v-model="cond.value"
+                    class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none"
+                  >
+                    <option value="Channel::Whatsapp">WhatsApp</option>
+                    <option value="Channel::WebWidget">Web Widget</option>
+                    <option value="Channel::Email">Email</option>
+                    <option value="Channel::Api">API</option>
+                    <option value="Channel::Telegram">Telegram</option>
+                    <option value="Channel::Sms">SMS</option>
+                  </select>
+
+                  <!-- Value: text -->
+                  <input
+                    v-if="
+                      conditionAttrMeta(cond.attribute).valueType === 'text'
+                    "
+                    v-model="cond.value"
+                    type="text"
+                    placeholder="Texto a buscar..."
+                    class="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                  />
                 </div>
                 <button
                   class="mt-1 p-1 text-slate-300 hover:text-red-400 transition-colors"

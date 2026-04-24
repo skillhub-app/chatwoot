@@ -968,6 +968,10 @@ ActiveRecord::Schema[7.1].define(version: 2026_04_22_000004) do
     t.bigint "action_stage_id"
     t.jsonb "conditions", default: {}, null: false
     t.boolean "active", default: true, null: false
+    t.text "description"
+    t.boolean "stop_on_reply", default: false, null: false
+    t.boolean "stop_on_stage_change", default: true, null: false
+    t.boolean "stop_on_human_takeover", default: false, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["action_stage_id"], name: "index_kanban_automations_on_action_stage_id"

@@ -358,6 +358,16 @@ class Kanban::ExecuteActionService
     when 'conversation_label'
       conv = Conversation.find_by(id: @item.conversation_id)
       conv&.cached_label_list_array&.include?(value) || false
+    when 'conversation_status'
+      conv = Conversation.find_by(id: @item.conversation_id)
+      conv&.status.to_s == value
+    when 'conversation_channel'
+      conv = Conversation.find_by(id: @item.conversation_id)
+      conv&.inbox&.channel_type.to_s == value
+    when 'message_contains'
+      conv = Conversation.find_by(id: @item.conversation_id)
+      last_msg = conv&.messages&.where(message_type: :incoming)&.order(:created_at)&.last
+      last_msg&.content.to_s.downcase.include?(value.downcase)
     else true
     end
   end

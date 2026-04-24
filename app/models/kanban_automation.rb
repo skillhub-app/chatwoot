@@ -2,15 +2,19 @@
 #
 # Table name: kanban_automations
 #
-#  id               :bigint           not null, primary key
-#  active           :boolean          default(TRUE), not null
-#  conditions       :jsonb            not null
-#  name             :string           not null
-#  created_at       :datetime         not null
-#  updated_at       :datetime         not null
-#  action_stage_id  :bigint
-#  pipeline_id      :bigint           not null
-#  trigger_stage_id :bigint           not null
+#  id                     :bigint           not null, primary key
+#  active                 :boolean          default(TRUE), not null
+#  conditions             :jsonb            not null
+#  description            :text
+#  name                   :string           not null
+#  stop_on_human_takeover :boolean          default(FALSE), not null
+#  stop_on_reply          :boolean          default(FALSE), not null
+#  stop_on_stage_change   :boolean          default(TRUE), not null
+#  created_at             :datetime         not null
+#  updated_at             :datetime         not null
+#  action_stage_id        :bigint
+#  pipeline_id            :bigint           not null
+#  trigger_stage_id       :bigint           not null
 #
 # Indexes
 #
