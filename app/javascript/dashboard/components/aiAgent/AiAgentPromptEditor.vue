@@ -3,6 +3,7 @@
 import { ref, watch, computed, onMounted } from 'vue';
 import aiAgentsAPI from '../../api/aiAgents';
 import AiAgentAssistant from './AiAgentAssistant.vue';
+import AiAgentVersionDiff from './AiAgentVersionDiff.vue';
 
 const props = defineProps({ agent: { type: Object, required: true } });
 const emit = defineEmits(['updated']);
@@ -93,8 +94,10 @@ function removeBranch(step, i) {
 }
 
 // ── Prompt History ───────────────────────────────────────────────────────────
-const versions = ref([]);
-const showHistory = ref(false);
+const versions       = ref([]);
+const showHistory    = ref(false);
+const diffVersionA   = ref(null);
+const showDiff       = ref(false);
 
 async function loadVersions() {
   const { data } = await aiAgentsAPI.getPromptVersions(props.agent.id);
@@ -102,8 +105,15 @@ async function loadVersions() {
 }
 
 function restoreVersion(v) {
-  form.value = deepClone({ ...DEFAULT_PROMPT, ...v.prompt });
+  form.value        = deepClone({ ...DEFAULT_PROMPT, ...v.prompt });
   showHistory.value = false;
+  showDiff.value    = false;
+}
+
+function openDiff(v) {
+  diffVersionA.value = v;
+  showDiff.value     = true;
+  showHistory.value  = false;
 }
 
 onMounted(loadVersions);
@@ -267,6 +277,27 @@ const removeBtnClass =
       @close="showAssistant = false"
     />
 
+    <!-- Version diff modal -->
+    <AiAgentVersionDiff
+      v-if="showDiff && diffVersionA"
+      :version-a="diffVersionA"
+      :label-a="`v${diffVersionA.version} (selecionada)`"
+      :version-b="{
+        version: agent.prompt_version,
+        prompt: agent.prompt,
+        created_by: 'publicada',
+        created_at: agent.updated_at,
+      }"
+      :label-b="`v${agent.prompt_version} (publicada)`"
+      @close="showDiff = false"
+      @restore="
+        v => {
+          restoreVersion(v);
+          showDiff = false;
+        }
+      "
+    />
+
     <!-- History modal -->
     <div
       v-if="showHistory"
@@ -293,18 +324,31 @@ const removeBtnClass =
           <div>
             <p class="text-sm font-medium text-slate-700 dark:text-slate-200">
               v{{ v.version }}
+              <span
+                v-if="v.version === agent.prompt_version"
+                class="ml-1.5 text-[10px] bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 px-1.5 py-0.5 rounded-full font-medium"
+                >publicada</span
+              >
             </p>
             <p class="text-xs text-slate-400">
               {{ v.created_by || 'Sistema' }} —
               {{ new Date(v.created_at).toLocaleString('pt-BR') }}
             </p>
           </div>
-          <button
-            class="text-xs px-3 py-1.5 rounded border border-violet-400 text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20"
-            @click="restoreVersion(v)"
-          >
-            Restaurar
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              class="text-xs px-2.5 py-1.5 rounded border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
+              @click="openDiff(v)"
+            >
+              Comparar
+            </button>
+            <button
+              class="text-xs px-2.5 py-1.5 rounded border border-violet-400 text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20"
+              @click="restoreVersion(v)"
+            >
+              Restaurar
+            </button>
+          </div>
         </div>
       </div>
     </div>
