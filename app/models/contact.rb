@@ -64,7 +64,7 @@ class Contact < ApplicationRecord
   has_many :notes, dependent: :destroy_async
   before_validation :prepare_contact_attributes
   after_create_commit :dispatch_create_event, :ip_lookup
-  after_update_commit :dispatch_update_event
+  after_update_commit :dispatch_update_event, :sync_kanban_item_titles
   after_destroy_commit :dispatch_destroy_event
   before_save :sync_contact_attributes
 
@@ -248,6 +248,12 @@ class Contact < ApplicationRecord
       Time.zone.now,
       contact_data: push_event_data.merge(account_id: account_id)
     )
+  end
+
+  def sync_kanban_item_titles
+    return unless saved_change_to_name?
+
+    KanbanItem.where(contact_id: id).update_all(title: name) # rubocop:disable Rails/SkipsModelValidations
   end
 end
 Contact.include_mod_with('Concerns::Contact')

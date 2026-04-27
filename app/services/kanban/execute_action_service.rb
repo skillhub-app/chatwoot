@@ -1,10 +1,14 @@
 class Kanban::ExecuteActionService
+  MESSAGING_CHANNELS = %w[Channel::Whatsapp Channel::Uazapi].freeze
+
   def initialize(execution)
-    @execution  = execution
-    @action     = execution.kanban_automation_action
-    @automation = @action.kanban_automation
-    @item       = execution.kanban_item
-    @config     = @action.config.with_indifferent_access
+    @execution       = execution
+    @action          = execution.kanban_automation_action
+    @automation      = @action.kanban_automation
+    @item            = execution.kanban_item
+    @config          = @action.config.with_indifferent_access
+    @skip_reason     = nil
+    @skip_description = nil
   end
 
   def perform
@@ -12,7 +16,7 @@ class Kanban::ExecuteActionService
 
     unless should_execute?
       @execution.update!(status: 'skipped', executed_at: Time.current)
-      log_activity('automation_skipped', reason: skip_reason)
+      log_activity('automation_skipped', reason: skip_reason, description: @skip_description)
       return
     end
 
@@ -29,10 +33,9 @@ class Kanban::ExecuteActionService
   def should_execute?
     @item.reload
 
-    @skip_reason = nil
-
     if @automation.stop_on_stage_change && @item.stage_id != @automation.trigger_stage_id
-      @skip_reason = 'lead_left_stage'
+      @skip_reason     = 'lead_left_stage'
+      @skip_description = 'Card saiu da etapa antes da execução'
       return false
     end
 
@@ -44,7 +47,8 @@ class Kanban::ExecuteActionService
                                 .where('created_at > ?', @execution.scheduled_at)
                                 .exists?
         if has_reply
-          @skip_reason = 'lead_replied'
+          @skip_reason     = 'lead_replied'
+          @skip_description = 'Lead respondeu após o agendamento'
           return false
         end
       end
@@ -53,7 +57,8 @@ class Kanban::ExecuteActionService
     if @automation.stop_on_human_takeover && @item.conversation_id.present?
       conversation = Conversation.find_by(id: @item.conversation_id)
       if conversation&.assignee_id.present?
-        @skip_reason = 'human_takeover'
+        @skip_reason     = 'human_takeover'
+        @skip_description = 'Humano assumiu a conversa'
         return false
       end
     end
@@ -65,37 +70,62 @@ class Kanban::ExecuteActionService
     @skip_reason || 'unknown'
   end
 
-  # ── WhatsApp ────────────────────────────────────────────────────────────────
+  # ── WhatsApp / UAZAPI ───────────────────────────────────────────────────────
 
   def execute_send_whatsapp
-    conversation = Conversation.find_by(id: @item.conversation_id)
+    conversation = find_conversation_for_message
     unless conversation
       @execution.update!(result: { error: 'no_conversation' })
-      return log_activity('automation_skipped', reason: 'no_conversation_linked')
+      return log_activity('automation_skipped', reason: 'no_conversation_linked',
+                          description: 'Sem conversa ativa vinculada ao card')
     end
 
     target_inbox_id = @config['inbox_id'].present? ? @config['inbox_id'].to_i : nil
 
-    # If a different inbox is configured and new-conversation mode is enabled
     if target_inbox_id && target_inbox_id != conversation.inbox_id && @config['open_new_conversation']
       conversation = open_conversation_in_inbox(target_inbox_id, conversation)
       return unless conversation
     end
 
-    unless conversation.inbox.channel_type == 'Channel::Whatsapp'
-      @execution.update!(result: { error: 'not_whatsapp_channel' })
-      return log_activity('automation_skipped', reason: 'not_whatsapp_channel')
+    channel_type = conversation.inbox.channel_type
+    unless MESSAGING_CHANNELS.include?(channel_type)
+      @execution.update!(result: { error: 'not_supported_channel', channel: channel_type })
+      return log_activity('automation_skipped', reason: 'not_supported_channel',
+                          description: "Canal #{channel_type} não suporta envio automático")
     end
 
-    if inside_business_hours?
-      content = @config['use_ai'] ? generate_ai_message : @config['message']
-      message = Messages::MessageBuilder.new(nil, conversation, { content: content, private: false }).perform
-      log_activity('automation_message_sent', message_id: message.id, content: content)
-      @execution.update!(result: { message_id: message.id })
-    else
+    unless inside_business_hours?
       @execution.update!(status: 'skipped', executed_at: Time.current, result: { error: 'outside_business_hours' })
-      log_activity('automation_skipped', reason: 'outside_business_hours')
+      return log_activity('automation_skipped', reason: 'outside_business_hours',
+                          description: 'Fora do horário comercial configurado')
     end
+
+    content = @config['use_ai'] ? generate_ai_message : @config['message']
+    message = Messages::MessageBuilder.new(nil, conversation, { content: content, private: false }).perform
+    log_activity('automation_message_sent', message_id: message.id, content: content,
+                 description: "Mensagem enviada: #{content.to_s.first(100)}")
+    @execution.update!(result: { message_id: message.id })
+  end
+
+  def find_conversation_for_message
+    return Conversation.find_by(id: @item.conversation_id) if @item.conversation_id.present?
+
+    open_convs = Conversation.where(account_id: @item.account_id, status: :open).order(updated_at: :desc)
+
+    if @item.contact_id.present?
+      conv = open_convs.find_by(contact_id: @item.contact_id)
+      return conv if conv
+    end
+
+    if @item.contact_phone.present?
+      digits = @item.contact_phone.gsub(/\D/, '')
+      contact = Contact.where(account_id: @item.account_id)
+                       .where('phone_number LIKE ?', "%#{digits}%")
+                       .first
+      return open_convs.find_by(contact_id: contact.id) if contact
+    end
+
+    nil
   end
 
   def open_conversation_in_inbox(inbox_id, existing_conversation)

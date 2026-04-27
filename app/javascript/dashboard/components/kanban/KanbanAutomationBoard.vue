@@ -99,7 +99,7 @@ async function ensureAutomation(stage) {
       stop_on_stage_change: true,
       stop_on_human_takeover: false,
     });
-    auto = res.data;
+    auto = res.data.payload;
     automations.value.push(auto);
   }
   return auto;
