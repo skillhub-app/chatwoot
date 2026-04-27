@@ -80,6 +80,12 @@ class Kanban::ExecuteActionService
                           description: 'Sem conversa ativa vinculada ao card')
     end
 
+    if conversation.cached_label_list_array.include?('ia_desligada')
+      @execution.update!(result: { error: 'ia_paused' })
+      return log_activity('automation_skipped', reason: 'ia_paused',
+                          description: 'IA pausada na conversa (label ia_desligada ativa)')
+    end
+
     target_inbox_id = @config['inbox_id'].present? ? @config['inbox_id'].to_i : nil
 
     if target_inbox_id && target_inbox_id != conversation.inbox_id && @config['open_new_conversation']
@@ -100,11 +106,19 @@ class Kanban::ExecuteActionService
                           description: 'Fora do horário comercial configurado')
     end
 
-    content = @config['use_ai'] ? generate_ai_message : @config['message']
-    message = Messages::MessageBuilder.new(nil, conversation, { content: content, private: false }).perform
+    content   = @config['use_ai'] ? generate_ai_message : interpolate_vars(@config['message'].to_s)
+    send_mode = @config['send_mode'].presence || 'bot'
+    agent_bot = send_mode == 'bot' ? find_agent_bot_for(conversation) : nil
+
+    msg_params = { content: content, private: false }
+    msg_params[:sender_type] = 'AgentBot' if agent_bot
+    msg_params[:sender_id]   = agent_bot.id if agent_bot
+
+    message = Messages::MessageBuilder.new(nil, conversation, msg_params).perform
     log_activity('automation_message_sent', message_id: message.id, content: content,
+                 sender: agent_bot ? "bot:#{agent_bot.id}" : 'system',
                  description: "Mensagem enviada: #{content.to_s.first(100)}")
-    @execution.update!(result: { message_id: message.id })
+    @execution.update!(result: { message_id: message.id, sender: agent_bot ? 'bot' : 'system' })
   end
 
   def find_conversation_for_message
@@ -165,11 +179,24 @@ class Kanban::ExecuteActionService
   end
 
   def inside_business_hours?
-    window = @config['window']
-    return true unless window.present?
+    start_str = @config['business_hours_start'].presence
+    end_str   = @config['business_hours_end'].presence
 
-    hour = Time.current.in_time_zone.hour
-    hour >= window['start_hour'].to_i && hour <= window['end_hour'].to_i
+    # Legacy window format: { start_hour: 9, end_hour: 18 }
+    if start_str.blank? && @config['window'].present?
+      w = @config['window']
+      start_str = w['start_hour'].to_s.rjust(2, '0') + ':00'
+      end_str   = w['end_hour'].to_s.rjust(2, '0') + ':00'
+    end
+
+    return true unless start_str.present? && end_str.present?
+
+    current = Time.current.in_time_zone.strftime('%H:%M')
+    current >= start_str && current <= end_str
+  end
+
+  def find_agent_bot_for(conversation)
+    AgentBotInbox.find_by(inbox_id: conversation.inbox_id)&.agent_bot
   end
 
   def generate_ai_message

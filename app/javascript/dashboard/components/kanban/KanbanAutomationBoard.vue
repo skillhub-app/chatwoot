@@ -831,6 +831,21 @@ async function toggleActive(stage, action) {
               </select>
             </div>
             <div>
+              <label class="text-xs font-medium text-slate-500 mb-1.5 block"
+                >Enviar via</label
+              >
+              <select
+                v-model="actionForm.config.send_mode"
+                class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+              >
+                <option value="bot">Bot (IA)</option>
+                <option value="system">Sistema</option>
+              </select>
+              <p class="text-xs text-slate-400 mt-1">
+                Bot: mensagem aparece como enviada pelo agente IA da caixa
+              </p>
+            </div>
+            <div>
               <label class="flex items-center gap-2 cursor-pointer mb-2">
                 <input
                   v-model="actionForm.config.use_ai"
