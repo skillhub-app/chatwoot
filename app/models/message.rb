@@ -336,12 +336,22 @@ class Message < ApplicationRecord
 
   def pause_ai_on_human_response
     return unless human_response?
-    return unless conversation.label_list.include?('ia_ligada')
 
-    current_labels = conversation.label_list.to_a
-    current_labels.delete('ia_ligada')
-    current_labels |= ['ia_desligada']
-    conversation.update!(label_list: current_labels)
+    agent             = ::AiAgent.find_by(inbox: conversation.inbox, active: true)
+    reactivation_cmd  = agent&.reactivation_command.to_s.strip
+    has_reactivation  = reactivation_cmd.present? && content.to_s.include?(reactivation_cmd)
+
+    if has_reactivation
+      current_labels = conversation.label_list.to_a
+      current_labels.delete('ia_desligada')
+      current_labels |= ['ia_ligada']
+      conversation.update!(label_list: current_labels)
+    elsif conversation.label_list.include?('ia_ligada')
+      current_labels = conversation.label_list.to_a
+      current_labels.delete('ia_ligada')
+      current_labels |= ['ia_desligada']
+      conversation.update!(label_list: current_labels)
+    end
   rescue StandardError => e
     Rails.logger.error "pause_ai_on_human_response error: #{e.message}"
   end
