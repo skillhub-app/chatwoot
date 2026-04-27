@@ -8,8 +8,22 @@ class Api::V1::Accounts::Kanban::ItemsController < Api::V1::Accounts::BaseContro
     @items = @items.assigned_to(params[:assignee_id]) if params[:assignee_id].present?
     @items = @items.with_source(params[:source]) if params[:source].present?
     @items = @items.with_temperature(params[:temperature]) if params[:temperature].present?
-    @items = @items.where('LOWER(title) LIKE ? OR contact_phone LIKE ?',
-                          "%#{params[:search].downcase}%", "%#{params[:search]}%") if params[:search].present?
+    if params[:search].present?
+      raw    = params[:search].to_s
+      digits = raw.gsub(/\D/, '')
+      if digits.present?
+        @items = @items.where(
+          'LOWER(title) LIKE ? OR contact_phone LIKE ? OR contact_phone LIKE ?',
+          "%#{raw.downcase}%", "%#{raw}%", "%#{digits}%"
+        )
+      else
+        @items = @items.where('LOWER(title) LIKE ?', "%#{raw.downcase}%")
+      end
+    end
+    if params[:phone].present?
+      digits = params[:phone].to_s.gsub(/\D/, '')
+      @items = @items.where('contact_phone LIKE ?', "%#{digits}%") if digits.present?
+    end
     @items = @items.where('created_at >= ?', params[:created_from]) if params[:created_from].present?
     @items = @items.where('created_at <= ?', params[:created_to]) if params[:created_to].present?
     @items = @items.where('expected_close_date >= ?', params[:close_date_from]) if params[:close_date_from].present?
