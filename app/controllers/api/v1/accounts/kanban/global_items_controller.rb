@@ -2,6 +2,13 @@ class Api::V1::Accounts::Kanban::GlobalItemsController < Api::V1::Accounts::Base
   def index
     @items = Current.account.kanban_items.includes(:pipeline, :stage, :assignee)
     @items = @items.where(conversation_id: params[:conversation_id]) if params[:conversation_id].present?
+    @items = @items.where(pipeline_id: params[:pipeline_id]) if params[:pipeline_id].present?
+    @items = @items.where(stage_id: params[:stage_id]) if params[:stage_id].present?
+    @items = @items.where(status: params[:status]) if params[:status].present?
+    if params[:phone].present?
+      sanitized = params[:phone].to_s.gsub(/\D/, '')
+      @items = @items.where('contact_phone LIKE ?', "%#{sanitized}%")
+    end
     @items = @items.ordered
     render json: {
       payload: @items.map { |item|
