@@ -16,6 +16,7 @@ import DuplicateInboxBanner from './channels/instagram/DuplicateInboxBanner.vue'
 import MicrosoftReauthorize from './channels/microsoft/Reauthorize.vue';
 import GoogleReauthorize from './channels/google/Reauthorize.vue';
 import WhatsappReauthorize from './channels/whatsapp/Reauthorize.vue';
+import UazapiQrConnector from './channels/UazapiQrConnector.vue';
 import InboxHealthAPI from 'dashboard/api/inboxHealth';
 import PreChatFormSettings from './PreChatForm/Settings.vue';
 import WeeklyAvailability from './components/WeeklyAvailability.vue';
@@ -72,6 +73,7 @@ export default {
     AccountHealth,
     Widget,
     AccessToken,
+    UazapiQrConnector,
   },
   mixins: [inboxMixin],
   setup() {
@@ -204,6 +206,16 @@ export default {
           {
             key: 'whatsapp-health',
             name: this.$t('INBOX_MGMT.TABS.ACCOUNT_HEALTH'),
+          },
+        ];
+      }
+
+      if (this.isUazapiInbox) {
+        visibleToAllChannelTabs = [
+          ...visibleToAllChannelTabs,
+          {
+            key: 'uazapi-qr',
+            name: 'QR Code Connector',
           },
         ];
       }
@@ -1233,6 +1245,9 @@ export default {
             :is-registering-webhook="isRegisteringWebhook"
             @register-webhook="registerWebhook"
           />
+        </div>
+        <div v-if="selectedTabKey === 'uazapi-qr'">
+          <UazapiQrConnector :inbox-id="inbox.id" />
         </div>
       </div>
     </section>

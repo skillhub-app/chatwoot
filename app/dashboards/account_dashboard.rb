@@ -34,7 +34,8 @@ class AccountDashboard < Administrate::BaseDashboard
     locale: Field::Select.with_options(collection: LANGUAGES_CONFIG.map { |_x, y| y[:iso_639_1_code] }),
     status: Field::Select.with_options(collection: [%w[Active active], %w[Suspended suspended]]),
     account_users: Field::HasMany,
-    custom_attributes: Field::String
+    custom_attributes: Field::String,
+    uazapi_instance_limit: Field::Number
   }.merge(enterprise_attribute_types).freeze
 
   # COLLECTION_ATTRIBUTES
@@ -70,6 +71,7 @@ class AccountDashboard < Administrate::BaseDashboard
     status
     conversations
     account_users
+    uazapi_instance_limit
   ] + enterprise_show_page_attributes).freeze
 
   # FORM_ATTRIBUTES
@@ -87,6 +89,7 @@ class AccountDashboard < Administrate::BaseDashboard
     name
     locale
     status
+    uazapi_instance_limit
   ] + enterprise_form_attributes).freeze
 
   # COLLECTION_FILTERS

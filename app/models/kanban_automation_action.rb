@@ -1,5 +1,5 @@
 class KanbanAutomationAction < ApplicationRecord
-  ACTION_TYPES = %w[send_whatsapp send_webhook create_task].freeze
+  ACTION_TYPES = %w[send_whatsapp send_webhook create_task crm_action].freeze
   DELAY_TYPES  = %w[minutes hours days business_days].freeze
 
   belongs_to :kanban_automation

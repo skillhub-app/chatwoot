@@ -314,8 +314,10 @@ Rails.application.routes.draw do
             get :health, on: :member
             post :register_webhook, on: :member
             post :reset_secret, on: :member
-            get  :uazapi_qr, on: :member
-            get  :uazapi_status, on: :member
+            get    :uazapi_qr, on: :member
+            get    :uazapi_status, on: :member
+            delete :uazapi_logout, on: :member
+            post   :uazapi_reconnect, on: :member
             if ChatwootApp.enterprise?
               resource :conference, only: %i[create destroy], controller: 'conference' do
                 get :token, on: :member

@@ -35,6 +35,14 @@ class ChannelUazapi::Api
          }.compact)
   end
 
+  def logout_instance
+    delete("/instance/logout/#{@channel.uazapi_instance_name}")
+  end
+
+  def restart_instance
+    post("/instance/restart/#{@channel.uazapi_instance_name}")
+  end
+
   def delete_instance
     delete("/instance/delete/#{@channel.uazapi_instance_name}")
   end

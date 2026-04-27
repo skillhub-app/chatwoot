@@ -40,6 +40,7 @@ module.exports = {
         'app/javascript/dashboard/routes/dashboard/settings/aiAgents/**/*.{js,vue}',
         'app/javascript/dashboard/api/aiAgents.js',
         'app/javascript/dashboard/routes/dashboard/settings/inbox/channels/Uazapi.vue',
+        'app/javascript/dashboard/routes/dashboard/settings/inbox/channels/UazapiQrConnector.vue',
         'app/javascript/dashboard/routes/dashboard/conversation/ContactPanel.vue',
       ],
       rules: {

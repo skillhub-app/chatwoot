@@ -94,6 +94,25 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
     render json: { connection_status: 'unknown', error: e.message }
   end
 
+  def uazapi_logout
+    return head :not_found unless @inbox.channel.is_a?(Channel::Uazapi)
+
+    @inbox.channel.api.logout_instance
+    @inbox.channel.update_columns(connection_status: 'close')
+    render json: { connection_status: 'close' }
+  rescue StandardError => e
+    render json: { error: e.message }, status: :unprocessable_entity
+  end
+
+  def uazapi_reconnect
+    return head :not_found unless @inbox.channel.is_a?(Channel::Uazapi)
+
+    @inbox.channel.api.restart_instance
+    render json: { status: 'restarting' }
+  rescue StandardError => e
+    render json: { error: e.message }, status: :unprocessable_entity
+  end
+
   def destroy
     ::DeleteObjectJob.perform_later(@inbox, Current.user, request.ip) if @inbox.present?
     render status: :ok, json: { message: I18n.t('messages.inbox_deletetion_response') }
