@@ -40,7 +40,7 @@ class ChannelUazapi::Api
   end
 
   def restart_instance
-    post("/instance/restart/#{@channel.uazapi_instance_name}")
+    put("/instance/restart/#{@channel.uazapi_instance_name}")
   end
 
   def delete_instance
@@ -79,6 +79,13 @@ class ChannelUazapi::Api
 
   def post(path, body = {})
     resp = conn.post(path) { |r| r.body = body }
+    raise "UAZAPI error #{resp.status}: #{resp.body}" unless resp.success?
+
+    resp.body
+  end
+
+  def put(path, body = {})
+    resp = conn.put(path) { |r| r.body = body }
     raise "UAZAPI error #{resp.status}: #{resp.body}" unless resp.success?
 
     resp.body
