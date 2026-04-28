@@ -47,7 +47,7 @@ class Api::V1::Accounts::Kanban::AutomationsController < Api::V1::Accounts::Base
   def automation_params
     params.permit(
       :name, :description, :trigger_stage_id, :active,
-      :stop_on_reply, :stop_on_stage_change, :stop_on_human_takeover
+      :stop_on_reply, :stop_on_stage_change, :stop_on_human_takeover, :stop_on_ai_disabled
     )
   end
 end

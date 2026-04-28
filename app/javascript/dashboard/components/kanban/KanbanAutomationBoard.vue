@@ -98,6 +98,7 @@ async function ensureAutomation(stage) {
       stop_on_reply: false,
       stop_on_stage_change: true,
       stop_on_human_takeover: false,
+      stop_on_ai_disabled: false,
     });
     auto = res.data.payload;
     automations.value.push(auto);
@@ -117,11 +118,13 @@ function openStopConditions(stageId) {
         stop_on_reply: auto.stop_on_reply,
         stop_on_stage_change: auto.stop_on_stage_change,
         stop_on_human_takeover: auto.stop_on_human_takeover,
+        stop_on_ai_disabled: auto.stop_on_ai_disabled,
       }
     : {
         stop_on_reply: false,
         stop_on_stage_change: true,
         stop_on_human_takeover: false,
+        stop_on_ai_disabled: false,
       };
   stopConditionsStageId.value = stageId;
 }
@@ -626,6 +629,16 @@ async function toggleActive(stage, action) {
                       />
                       <span class="text-xs text-slate-600 dark:text-slate-300"
                         >Agente assumir</span
+                      >
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input
+                        v-model="stopConditionsTemp.stop_on_ai_disabled"
+                        type="checkbox"
+                        class="rounded border-slate-300 text-violet-600"
+                      />
+                      <span class="text-xs text-slate-600 dark:text-slate-300"
+                        >IA desligada</span
                       >
                     </label>
                   </div>

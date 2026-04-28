@@ -8,6 +8,7 @@ json.active automation.active
 json.stop_on_reply automation.stop_on_reply
 json.stop_on_stage_change automation.stop_on_stage_change
 json.stop_on_human_takeover automation.stop_on_human_takeover
+json.stop_on_ai_disabled automation.stop_on_ai_disabled
 
 json.actions automation.kanban_automation_actions.ordered do |action|
   json.id action.id

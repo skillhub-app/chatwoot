@@ -63,6 +63,16 @@ class Kanban::ExecuteActionService
       end
     end
 
+    if @automation.stop_on_ai_disabled
+      conversation = Conversation.find_by(id: @item.conversation_id)
+      ai_disabled = conversation&.cached_label_list_array&.include?('ia_desligada')
+      if ai_disabled
+        @skip_reason     = 'ai_disabled'
+        @skip_description = 'IA desligada (label ia_desligada ativa na conversa)'
+        return false
+      end
+    end
+
     true
   end
 
