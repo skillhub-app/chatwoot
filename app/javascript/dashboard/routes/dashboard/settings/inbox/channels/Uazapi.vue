@@ -17,6 +17,7 @@ const phoneNumber  = ref('');
 const creating     = ref(false);
 const inboxId      = ref(null);
 const qrCode       = ref(null);
+const qrError      = ref(null);
 const qrLoading    = ref(false);
 const connected    = ref(false);
 let pollInterval   = null;
@@ -28,8 +29,14 @@ async function fetchQr() {
     const { data } = await window.axios.get(
       `/api/v1/accounts/${accountId.value}/inboxes/${inboxId.value}/uazapi_qr`
     );
+    if (data.error) {
+      qrError.value = data.error;
+      return null;
+    }
+    qrError.value = null;
     return data;
-  } catch {
+  } catch (err) {
+    qrError.value = err?.response?.data?.error || err.message || 'Erro ao obter QR code';
     return null;
   }
 }
@@ -56,7 +63,7 @@ async function checkConnection() {
       }
     }
   } catch {
-    // ignore
+    // ignore polling errors silently
   }
 }
 
@@ -74,6 +81,12 @@ async function loadQrCode() {
   } finally {
     qrLoading.value = false;
   }
+}
+
+async function retryQr() {
+  qrCode.value = null;
+  qrError.value = null;
+  await loadQrCode();
 }
 
 async function createChannel() {
@@ -177,6 +190,7 @@ onBeforeUnmount(() => stopPolling());
         <p class="text-sm text-slate-600 dark:text-slate-300">
           Escaneie o QR code com o WhatsApp para conectar.
         </p>
+
         <div
           v-if="qrLoading"
           class="size-48 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-lg"
@@ -185,19 +199,40 @@ onBeforeUnmount(() => stopPolling());
             class="i-lucide-loader-circle animate-spin size-8 text-slate-400"
           />
         </div>
+
         <img
           v-else-if="qrCode"
           :src="qrCode"
           alt="QR Code WhatsApp"
           class="size-48 rounded-lg border border-slate-200"
         />
+
+        <div
+          v-else-if="qrError"
+          class="flex flex-col items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 max-w-xs text-center"
+        >
+          <span class="i-lucide-alert-circle size-8 text-red-500" />
+          <p class="text-xs text-red-600 dark:text-red-400 break-words">
+            {{ qrError }}
+          </p>
+          <NextButton
+            size="small"
+            solid
+            red
+            label="Tentar novamente"
+            @click="retryQr"
+          />
+        </div>
+
         <div
           v-else
           class="size-48 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-400 text-xs text-center px-4"
         >
-          QR code não disponível ainda. Aguarde alguns segundos.
+          Aguardando QR code... Verifique as configurações UAZAPI no Super
+          Admin.
         </div>
-        <p class="text-[11px] text-slate-400">
+
+        <p v-if="!qrError" class="text-[11px] text-slate-400">
           Atualizando a cada 8 segundos...
         </p>
       </div>

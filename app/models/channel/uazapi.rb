@@ -54,11 +54,16 @@ class Channel::Uazapi < ApplicationRecord
   end
 
   def provision_instance
-    return unless api_base_url.present? && admin_token.present?
+    unless api_base_url.present? && admin_token.present?
+      Rails.logger.warn "Channel::Uazapi [#{uazapi_instance_name}] UAZAPI_BASE_URL ou UAZAPI_ADMIN_TOKEN não configurados — instância não provisionada"
+      return
+    end
 
     webhook_url = "#{ENV.fetch('FRONTEND_URL', '')}/webhooks/uazapi/#{identifier}"
-    api.create_instance(webhook_url: webhook_url)
+    Rails.logger.info "Channel::Uazapi [#{uazapi_instance_name}] provisionando em #{api_base_url}"
+    result = api.create_instance(webhook_url: webhook_url)
+    Rails.logger.info "Channel::Uazapi [#{uazapi_instance_name}] provisionado: #{result.inspect}"
   rescue StandardError => e
-    Rails.logger.error "Channel::Uazapi provision_instance error: #{e.message}"
+    Rails.logger.error "Channel::Uazapi [#{uazapi_instance_name}] provision_instance FALHOU: #{e.message}"
   end
 end

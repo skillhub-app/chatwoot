@@ -1,4 +1,7 @@
 class ChannelUazapi::Api
+  CONNECTED_STATES = %w[open connected].freeze
+  CONNECTING_STATES = %w[connecting qr syncing].freeze
+
   def initialize(channel)
     @channel = channel
   end
@@ -6,7 +9,8 @@ class ChannelUazapi::Api
   def create_instance(webhook_url:)
     post('/instance/create', {
            instanceName: @channel.uazapi_instance_name,
-           webhookUrl:   webhook_url,
+           webhook:      webhook_url,
+           qrcode:       true,
            events:       %w[MESSAGES_UPSERT CONNECTION_UPDATE]
          })
   end
@@ -15,23 +19,42 @@ class ChannelUazapi::Api
     get("/instance/connect/#{@channel.uazapi_instance_name}")
   end
 
+  def connection_state
+    get("/instance/connectionState/#{@channel.uazapi_instance_name}")
+  end
+
   def instance_info
-    get("/instance/fetchInstances", { instanceName: @channel.uazapi_instance_name })
+    get('/instance/fetchInstances', { instanceName: @channel.uazapi_instance_name })
+  end
+
+  def normalized_status
+    state = fetch_state
+    if CONNECTED_STATES.include?(state)
+      'connected'
+    elsif CONNECTING_STATES.include?(state)
+      'connecting'
+    elsif state == 'close'
+      'disconnected'
+    else
+      state.presence || 'unknown'
+    end
+  rescue StandardError
+    'unknown'
   end
 
   def send_text(phone_number, text)
     post("/message/sendText/#{@channel.uazapi_instance_name}", {
-           number:  sanitize_phone(phone_number),
-           text:    text
+           number: sanitize_phone(phone_number),
+           text:   text
          })
   end
 
   def send_media(phone_number, url:, caption: nil, type: 'image')
     post("/message/sendMedia/#{@channel.uazapi_instance_name}", {
-           number:  sanitize_phone(phone_number),
+           number:    sanitize_phone(phone_number),
            mediatype: type,
-           media:   url,
-           caption: caption
+           media:     url,
+           caption:   caption
          }.compact)
   end
 
@@ -48,6 +71,19 @@ class ChannelUazapi::Api
   end
 
   private
+
+  def fetch_state
+    data = connection_state
+    # { "instance": { "instanceName": "...", "state": "open" } }
+    state = data.dig('instance', 'state') || data.dig('instance', 'connectionStatus') ||
+            data['state'] || data['connectionStatus'] || data['status']
+    state.to_s.downcase
+  rescue StandardError
+    raw = instance_info
+    items = raw.is_a?(Array) ? raw : [raw]
+    item = items.find { |i| i['instanceName'] == @channel.uazapi_instance_name } || {}
+    (item.dig('instance', 'connectionStatus') || item['connectionStatus'] || item['state'] || '').downcase
+  end
 
   def sanitize_phone(number)
     number.to_s.gsub(/\D/, '')
@@ -72,28 +108,28 @@ class ChannelUazapi::Api
 
   def get(path, params = {})
     resp = conn.get(path) { |r| r.params = params }
-    raise "UAZAPI error #{resp.status}: #{resp.body}" unless resp.success?
+    raise "UAZAPI error #{resp.status}: #{resp.body.inspect}" unless resp.success?
 
     resp.body
   end
 
   def post(path, body = {})
-    resp = conn.post(path) { |r| r.body = body }
-    raise "UAZAPI error #{resp.status}: #{resp.body}" unless resp.success?
+    resp = conn.post(path, body)
+    raise "UAZAPI error #{resp.status}: #{resp.body.inspect}" unless resp.success?
 
     resp.body
   end
 
   def put(path, body = {})
-    resp = conn.put(path) { |r| r.body = body }
-    raise "UAZAPI error #{resp.status}: #{resp.body}" unless resp.success?
+    resp = conn.put(path, body)
+    raise "UAZAPI error #{resp.status}: #{resp.body.inspect}" unless resp.success?
 
     resp.body
   end
 
   def delete(path)
     resp = conn.delete(path)
-    raise "UAZAPI error #{resp.status}: #{resp.body}" unless resp.success?
+    raise "UAZAPI error #{resp.status}: #{resp.body.inspect}" unless resp.success?
 
     resp.body
   end

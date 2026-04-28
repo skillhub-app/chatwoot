@@ -80,7 +80,8 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
     return head :not_found unless @inbox.channel.is_a?(Channel::Uazapi)
 
     data = @inbox.channel.api.get_qr_code
-    render json: { base64: data['base64'] || data['qrcode'] }
+    base64 = data['base64'] || data['qrcode'] || data.dig('qrcode', 'base64') || data.dig('base64')
+    render json: { base64: base64 }
   rescue StandardError => e
     render json: { error: e.message }, status: :unprocessable_entity
   end
@@ -88,10 +89,7 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
   def uazapi_status
     return head :not_found unless @inbox.channel.is_a?(Channel::Uazapi)
 
-    data = @inbox.channel.api.instance_info
-    instances = data.is_a?(Array) ? data : [data]
-    info = instances.find { |i| i['instanceName'] == @inbox.channel.uazapi_instance_name } || {}
-    status = info.dig('connectionStatus') || info.dig('instance', 'connectionStatus') || 'unknown'
+    status = @inbox.channel.api.normalized_status
     @inbox.channel.update_columns(connection_status: status) if status != 'unknown'
     render json: { connection_status: status }
   rescue StandardError => e
