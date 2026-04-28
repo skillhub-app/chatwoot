@@ -832,17 +832,40 @@ async function toggleActive(stage, action) {
             </div>
             <div>
               <label class="text-xs font-medium text-slate-500 mb-1.5 block"
-                >Enviar via</label
+                >Enviar como</label
               >
               <select
-                v-model="actionForm.config.send_mode"
+                v-model="actionForm.config.sender_type"
                 class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
               >
-                <option value="bot">Bot (IA)</option>
-                <option value="system">Sistema</option>
+                <option value="system">Sistema (sem remetente)</option>
+                <option value="lead_owner">Responsável atual do lead</option>
+                <option value="specific_user">Usuário específico</option>
+              </select>
+            </div>
+            <div v-if="actionForm.config.sender_type === 'specific_user'">
+              <label class="text-xs font-medium text-slate-500 mb-1.5 block"
+                >Usuário remetente</label
+              >
+              <select
+                v-model="actionForm.config.sender_user_id"
+                class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+              >
+                <option :value="undefined">Selecione um agente...</option>
+                <option v-for="a in agents" :key="a.id" :value="a.id">
+                  {{ a.name }}
+                </option>
               </select>
               <p class="text-xs text-slate-400 mt-1">
-                Bot: mensagem aparece como enviada pelo agente IA da caixa
+                A mensagem aparece como enviada por este agente
+              </p>
+            </div>
+            <div
+              v-if="actionForm.config.sender_type === 'lead_owner'"
+              class="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-2"
+            >
+              <p class="text-xs text-amber-700 dark:text-amber-300">
+                Se o lead não tiver responsável, a mensagem será ignorada.
               </p>
             </div>
             <div>

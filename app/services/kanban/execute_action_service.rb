@@ -80,24 +80,11 @@ class Kanban::ExecuteActionService
                           description: 'Sem conversa ativa vinculada ao card')
     end
 
-    if conversation.cached_label_list_array.include?('ia_desligada')
-      @execution.update!(result: { error: 'ia_paused' })
-      return log_activity('automation_skipped', reason: 'ia_paused',
-                          description: 'IA pausada na conversa (label ia_desligada ativa)')
-    end
-
     target_inbox_id = @config['inbox_id'].present? ? @config['inbox_id'].to_i : nil
 
     if target_inbox_id && target_inbox_id != conversation.inbox_id && @config['open_new_conversation']
       conversation = open_conversation_in_inbox(target_inbox_id, conversation)
       return unless conversation
-    end
-
-    channel_type = conversation.inbox.channel_type
-    unless MESSAGING_CHANNELS.include?(channel_type)
-      @execution.update!(result: { error: 'not_supported_channel', channel: channel_type })
-      return log_activity('automation_skipped', reason: 'not_supported_channel',
-                          description: "Canal #{channel_type} não suporta envio automático")
     end
 
     unless inside_business_hours?
@@ -106,19 +93,35 @@ class Kanban::ExecuteActionService
                           description: 'Fora do horário comercial configurado')
     end
 
-    content   = @config['use_ai'] ? generate_ai_message : interpolate_vars(@config['message'].to_s)
-    send_mode = @config['send_mode'].presence || 'bot'
-    agent_bot = send_mode == 'bot' ? find_agent_bot_for(conversation) : nil
+    sender_user = resolve_sender_user(conversation)
+    if @config['sender_type'].present? && @config['sender_type'] != 'system' && sender_user.nil?
+      @execution.update!(result: { error: 'sender_not_found' })
+      return log_activity('automation_skipped', reason: 'sender_not_found',
+                          description: 'Usuário remetente não encontrado ou lead sem responsável')
+    end
 
-    msg_params = { content: content, private: false }
-    msg_params[:sender_type] = 'AgentBot' if agent_bot
-    msg_params[:sender_id]   = agent_bot.id if agent_bot
+    content = @config['use_ai'] ? generate_ai_message : interpolate_vars(@config['message'].to_s)
 
-    message = Messages::MessageBuilder.new(nil, conversation, msg_params).perform
-    log_activity('automation_message_sent', message_id: message.id, content: content,
-                 sender: agent_bot ? "bot:#{agent_bot.id}" : 'system',
-                 description: "Mensagem enviada: #{content.to_s.first(100)}")
-    @execution.update!(result: { message_id: message.id, sender: agent_bot ? 'bot' : 'system' })
+    msg_params = {
+      content: content,
+      private: false,
+      additional_attributes: {
+        automation_generated:  true,
+        kanban_automation_id:  @automation.id,
+        kanban_action_id:      @action.id,
+        kanban_item_id:        @item.id
+      }
+    }
+
+    message = Messages::MessageBuilder.new(sender_user, conversation, msg_params).perform
+
+    sender_label = sender_user ? "#{sender_user.name} (id:#{sender_user.id})" : 'sistema'
+    log_activity('automation_message_sent',
+                 message_id:      message.id,
+                 conversation_id: conversation.id,
+                 sender:          sender_label,
+                 description:     "Follow-up enviado por #{sender_label} na conversa ##{conversation.id}: #{content.to_s.first(80)}")
+    @execution.update!(result: { message_id: message.id, conversation_id: conversation.id, sender: sender_label })
   end
 
   def find_conversation_for_message
@@ -195,8 +198,19 @@ class Kanban::ExecuteActionService
     current >= start_str && current <= end_str
   end
 
-  def find_agent_bot_for(conversation)
-    AgentBotInbox.find_by(inbox_id: conversation.inbox_id)&.agent_bot
+  def resolve_sender_user(conversation)
+    case @config['sender_type'].to_s
+    when 'specific_user'
+      uid = @config['sender_user_id'].to_i
+      uid.positive? ? User.find_by(id: uid) : nil
+    when 'lead_owner'
+      @item.assignee
+    when 'automation_default'
+      uid = @config['default_sender_user_id'].to_i
+      uid.positive? ? User.find_by(id: uid) : nil
+    else
+      nil
+    end
   end
 
   def generate_ai_message
