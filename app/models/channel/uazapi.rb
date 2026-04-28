@@ -5,7 +5,11 @@ class Channel::Uazapi < ApplicationRecord
 
   EDITABLE_ATTRS = %i[uazapi_instance_name phone_number].freeze
 
+  belongs_to :account
+
   validates :uazapi_instance_name, presence: true, uniqueness: true
+  validate :uazapi_must_be_enabled, on: :create
+  validate :instance_limit_not_exceeded, on: :create
 
   has_secure_token :identifier
 
@@ -36,7 +40,22 @@ class Channel::Uazapi < ApplicationRecord
 
   private
 
+  def uazapi_must_be_enabled
+    errors.add(:base, 'UAZAPI não está habilitada nesta instalação') unless uazapi_enabled?
+  end
+
+  def instance_limit_not_exceeded
+    return unless account
+
+    limit_str = InstallationConfig.find_by(name: 'UAZAPI_DEFAULT_INSTANCE_LIMIT')&.value
+    limit = limit_str.to_i.positive? ? limit_str.to_i : 5
+    current = account.uazapi_channels.count
+    errors.add(:base, "Limite de instâncias UAZAPI atingido (#{current}/#{limit})") if current >= limit
+  end
+
   def provision_instance
+    return unless api_base_url.present? && admin_token.present?
+
     webhook_url = "#{ENV.fetch('FRONTEND_URL', '')}/webhooks/uazapi/#{identifier}"
     api.create_instance(webhook_url: webhook_url)
   rescue StandardError => e

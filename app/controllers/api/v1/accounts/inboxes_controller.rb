@@ -41,6 +41,10 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
       )
       @inbox.save!
     end
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { message: e.record.errors.full_messages.join(', ') }, status: :unprocessable_entity
+  rescue StandardError => e
+    render json: { message: e.message }, status: :unprocessable_entity
   end
 
   def update
