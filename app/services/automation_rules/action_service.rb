@@ -1,8 +1,9 @@
 class AutomationRules::ActionService < ActionService
-  def initialize(rule, account, conversation)
+  def initialize(rule, account, conversation, context = {})
     super(conversation)
     @rule = rule
     @account = account
+    @context = context
     Current.executed_by = rule
   end
 
@@ -37,6 +38,7 @@ class AutomationRules::ActionService < ActionService
 
   def send_webhook_event(webhook_url)
     payload = @conversation.webhook_data.merge(event: "automation_event.#{@rule.event_name}")
+    payload[:ai_enabled] = @context[:ai_enabled] if @context.key?(:ai_enabled)
     WebhookJob.perform_later(webhook_url[0], payload)
   end
 

@@ -1,6 +1,7 @@
 class AutomationRuleListener < BaseListener
   def conversation_updated(event)
     process_conversation_event(event, 'conversation_updated')
+    process_ai_status_changed(event)
   end
 
   def conversation_created(event)
@@ -35,6 +36,34 @@ class AutomationRuleListener < BaseListener
   end
 
   private
+
+  def process_ai_status_changed(event)
+    return if performed_by_automation?(event)
+
+    conversation = event.data[:conversation]
+    account = conversation.account
+    changed_attributes = event.data[:changed_attributes] || {}
+
+    label_changes = changed_attributes[:label_list] || changed_attributes['label_list']
+    return unless label_changes
+
+    old_labels = Array(label_changes[0])
+    new_labels = Array(label_changes[1])
+
+    ai_labels = %w[ia_ligada ia_desligada]
+    return if (old_labels & ai_labels) == (new_labels & ai_labels)
+
+    return unless rule_present?('ai_status_changed', account)
+
+    ai_enabled = new_labels.include?('ia_ligada')
+    rules = current_account_rules('ai_status_changed', account)
+
+    rules.each do |rule|
+      conditions_match = ::AutomationRules::ConditionsFilterService.new(rule, conversation,
+                                                                        { changed_attributes: changed_attributes }).perform
+      AutomationRules::ActionService.new(rule, account, conversation, { ai_enabled: ai_enabled }).perform if conditions_match.present?
+    end
+  end
 
   def process_conversation_event(event, event_name)
     return if performed_by_automation?(event)
