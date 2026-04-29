@@ -3,17 +3,18 @@ class Channel::Uazapi < ApplicationRecord
 
   self.table_name = 'channel_uazapi'
 
-  EDITABLE_ATTRS = %i[uazapi_instance_name phone_number].freeze
+  EDITABLE_ATTRS = %i[uazapi_instance_name uazapi_instance_token phone_number].freeze
 
   belongs_to :account
 
   validates :uazapi_instance_name, presence: true, uniqueness: true
+  validates :uazapi_instance_token, presence: true
   validate :uazapi_must_be_enabled, on: :create
   validate :instance_limit_not_exceeded, on: :create
 
   has_secure_token :identifier
 
-  after_create :provision_instance
+  after_create :configure_webhook
 
   def name
     'Uazapi'
@@ -24,14 +25,13 @@ class Channel::Uazapi < ApplicationRecord
       ENV.fetch('UAZAPI_BASE_URL', nil)
   end
 
-  def admin_token
-    InstallationConfig.find_by(name: 'UAZAPI_ADMIN_TOKEN')&.value.presence ||
-      ENV.fetch('UAZAPI_ADMIN_TOKEN', nil)
-  end
-
   def uazapi_enabled?
     enabled = InstallationConfig.find_by(name: 'UAZAPI_ENABLED')&.value
     enabled.to_s.downcase.in?(%w[true 1 yes])
+  end
+
+  def webhook_url
+    "#{ENV.fetch('FRONTEND_URL', '')}/webhooks/uazapi/#{identifier}"
   end
 
   def api
@@ -53,17 +53,12 @@ class Channel::Uazapi < ApplicationRecord
     errors.add(:base, "Limite de instâncias UAZAPI atingido (#{current}/#{limit})") if current >= limit
   end
 
-  def provision_instance
-    unless api_base_url.present? && admin_token.present?
-      Rails.logger.warn "Channel::Uazapi [#{uazapi_instance_name}] UAZAPI_BASE_URL ou UAZAPI_ADMIN_TOKEN não configurados — instância não provisionada"
-      return
-    end
+  def configure_webhook
+    return unless api_base_url.present? && uazapi_instance_token.present?
 
-    webhook_url = "#{ENV.fetch('FRONTEND_URL', '')}/webhooks/uazapi/#{identifier}"
-    Rails.logger.info "Channel::Uazapi [#{uazapi_instance_name}] provisionando em #{api_base_url}"
-    result = api.create_instance(webhook_url: webhook_url)
-    Rails.logger.info "Channel::Uazapi [#{uazapi_instance_name}] provisionado: #{result.inspect}"
+    api.configure_webhook(webhook_url: webhook_url)
+    Rails.logger.info "Channel::Uazapi [#{uazapi_instance_name}] webhook configurado: #{webhook_url}"
   rescue StandardError => e
-    Rails.logger.error "Channel::Uazapi [#{uazapi_instance_name}] provision_instance FALHOU: #{e.message}"
+    Rails.logger.warn "Channel::Uazapi [#{uazapi_instance_name}] configure_webhook falhou (configure manualmente): #{e.message}"
   end
 end

@@ -316,6 +316,7 @@ Rails.application.routes.draw do
             post :reset_secret, on: :member
             get    :uazapi_qr, on: :member
             get    :uazapi_status, on: :member
+            get    :uazapi_webhook_url, on: :member
             delete :uazapi_logout, on: :member
             post   :uazapi_reconnect, on: :member
             if ChatwootApp.enterprise?

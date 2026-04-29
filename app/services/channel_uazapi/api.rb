@@ -6,25 +6,24 @@ class ChannelUazapi::Api
     @channel = channel
   end
 
-  def create_instance(webhook_url:)
-    post('/instance/create', {
+  # Configure webhook on existing instance (requires instance token)
+  def configure_webhook(webhook_url:)
+    post('/webhook', {
            instanceName: @channel.uazapi_instance_name,
-           webhook:      webhook_url,
-           qrcode:       true,
+           url:          webhook_url,
+           enabled:      true,
            events:       %w[MESSAGES_UPSERT CONNECTION_UPDATE]
          })
   end
 
+  # GET /instance/connect/:name — returns QR code base64
   def get_qr_code
     get("/instance/connect/#{@channel.uazapi_instance_name}")
   end
 
+  # GET /instance/connectionState/:name — returns connection state
   def connection_state
     get("/instance/connectionState/#{@channel.uazapi_instance_name}")
-  end
-
-  def instance_info
-    get('/instance/fetchInstances', { instanceName: @channel.uazapi_instance_name })
   end
 
   def normalized_status
@@ -74,15 +73,9 @@ class ChannelUazapi::Api
 
   def fetch_state
     data = connection_state
-    # { "instance": { "instanceName": "...", "state": "open" } }
     state = data.dig('instance', 'state') || data.dig('instance', 'connectionStatus') ||
             data['state'] || data['connectionStatus'] || data['status']
     state.to_s.downcase
-  rescue StandardError
-    raw = instance_info
-    items = raw.is_a?(Array) ? raw : [raw]
-    item = items.find { |i| i['instanceName'] == @channel.uazapi_instance_name } || {}
-    (item.dig('instance', 'connectionStatus') || item['connectionStatus'] || item['state'] || '').downcase
   end
 
   def sanitize_phone(number)
@@ -93,8 +86,9 @@ class ChannelUazapi::Api
     @channel.api_base_url.to_s.chomp('/')
   end
 
-  def admin_token
-    @channel.admin_token
+  # UAZAPI uses 'token' header with the per-instance token (not a global admin key)
+  def instance_token
+    @channel.uazapi_instance_token.to_s
   end
 
   def conn
@@ -102,35 +96,50 @@ class ChannelUazapi::Api
       f.request :json
       f.response :json
       f.options.timeout = 30
-      f.headers['apikey'] = admin_token
+      f.headers['token'] = instance_token
     end
   end
 
   def get(path, params = {})
     resp = conn.get(path) { |r| r.params = params }
-    raise "UAZAPI error #{resp.status}: #{resp.body.inspect}" unless resp.success?
-
+    handle_response!(resp)
     resp.body
   end
 
   def post(path, body = {})
     resp = conn.post(path, body)
-    raise "UAZAPI error #{resp.status}: #{resp.body.inspect}" unless resp.success?
-
+    handle_response!(resp)
     resp.body
   end
 
   def put(path, body = {})
     resp = conn.put(path, body)
-    raise "UAZAPI error #{resp.status}: #{resp.body.inspect}" unless resp.success?
-
+    handle_response!(resp)
     resp.body
   end
 
   def delete(path)
     resp = conn.delete(path)
-    raise "UAZAPI error #{resp.status}: #{resp.body.inspect}" unless resp.success?
-
+    handle_response!(resp)
     resp.body
+  end
+
+  def handle_response!(resp)
+    return if resp.success?
+
+    body = resp.body
+    msg = if body.is_a?(Hash)
+            body['message'] || body['error'] || body.inspect
+          else
+            body.to_s
+          end
+
+    case resp.status
+    when 401 then raise "UAZAPI: token inválido ou ausente (#{msg})"
+    when 404 then raise "UAZAPI: instância '#{@channel.uazapi_instance_name}' não encontrada (#{msg})"
+    when 405 then raise "UAZAPI: método não suportado para este endpoint (#{msg})"
+    when 422 then raise "UAZAPI: dados inválidos (#{msg})"
+    else raise "UAZAPI error #{resp.status}: #{msg}"
+    end
   end
 end

@@ -79,21 +79,45 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
   def uazapi_qr
     return head :not_found unless @inbox.channel.is_a?(Channel::Uazapi)
 
-    data = @inbox.channel.api.get_qr_code
-    base64 = data['base64'] || data['qrcode'] || data.dig('qrcode', 'base64') || data.dig('base64')
-    render json: { base64: base64 }
+    channel = @inbox.channel
+    unless channel.uazapi_instance_token.present?
+      return render json: { error: 'Token da instância não configurado. Edite a inbox e informe o token.' }, status: :unprocessable_entity
+    end
+
+    data = channel.api.get_qr_code
+    base64 = data['base64'] || data['qrcode'] || data.dig('qrcode', 'base64')
+    if base64.present?
+      render json: { base64: base64, instance_name: channel.uazapi_instance_name }
+    else
+      render json: { status: 'pending', qr_code: nil, message: 'QR Code ainda não disponível — aguarde alguns segundos', instance_name: channel.uazapi_instance_name }
+    end
   rescue StandardError => e
-    render json: { error: e.message }, status: :unprocessable_entity
+    status_code = e.message.include?('não encontrada') ? :not_found : :bad_gateway
+    render json: { error: e.message, instance_name: @inbox.channel.uazapi_instance_name }, status: status_code
   end
 
   def uazapi_status
     return head :not_found unless @inbox.channel.is_a?(Channel::Uazapi)
 
-    status = @inbox.channel.api.normalized_status
-    @inbox.channel.update_columns(connection_status: status) if status != 'unknown'
-    render json: { connection_status: status }
+    channel = @inbox.channel
+    unless channel.uazapi_instance_token.present?
+      return render json: { connection_status: 'unknown', error: 'Token da instância não configurado' }
+    end
+
+    status = channel.api.normalized_status
+    channel.update_columns(connection_status: status) if status != 'unknown'
+    render json: { connection_status: status, instance_name: channel.uazapi_instance_name }
   rescue StandardError => e
     render json: { connection_status: 'unknown', error: e.message }
+  end
+
+  def uazapi_webhook_url
+    return head :not_found unless @inbox.channel.is_a?(Channel::Uazapi)
+
+    render json: {
+      webhook_url: @inbox.channel.webhook_url,
+      instance_name: @inbox.channel.uazapi_instance_name
+    }
   end
 
   def uazapi_logout
