@@ -174,7 +174,7 @@ Rails.application.routes.draw do
                     patch :reopen
                   end
                 end
-                resources :notes, only: [:index, :create, :destroy]
+                resources :notes, only: [:index, :create, :update, :destroy]
                 resources :activities, only: [:index]
                 resources :attachments, only: [:index, :create, :destroy]
                 resources :automation_executions, only: [:index], controller: 'automation_executions'

@@ -1,6 +1,6 @@
 class Api::V1::Accounts::Kanban::NotesController < Api::V1::Accounts::BaseController
   before_action :fetch_item
-  before_action :fetch_note, only: [:destroy]
+  before_action :fetch_note, only: [:update, :destroy]
 
   def index
     @notes = @item.kanban_notes.ordered
@@ -9,6 +9,10 @@ class Api::V1::Accounts::Kanban::NotesController < Api::V1::Accounts::BaseContro
   def create
     @note = @item.kanban_notes.new(content: params.require(:content), author: Current.user)
     @note.save!
+  end
+
+  def update
+    @note.update!(content: params.require(:content))
   end
 
   def destroy
