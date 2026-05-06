@@ -26,6 +26,19 @@ class AiAgent::ProcessMessageJob < ApplicationJob
   private
 
   def run(agent, conversation, new_messages, started_at)
+    combined_text = new_messages.join(' ')
+    injection     = AiAgent::PromptInjectionFilter.blocked?(combined_text)
+
+    if injection[:blocked]
+      duration = ((Time.current - started_at) * 1000).round
+      blocked_response = AiAgent::PromptInjectionFilter::BLOCKED_RESPONSE
+      record_execution(agent, conversation, new_messages, blocked_response, duration,
+                       status: 'blocked',
+                       error_message: "prompt_injection: #{injection[:pattern]}")
+      AiAgent::MessageHumanizer.send_response(conversation, blocked_response, agent: agent)
+      return
+    end
+
     prompt   = AiAgent::PromptBuilder.build(agent, conversation, new_messages)
     active_tools = agent.tools.active.ordered.to_a
     context  = build_context(agent, conversation)
