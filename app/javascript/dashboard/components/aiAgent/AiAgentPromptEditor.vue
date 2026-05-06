@@ -5,6 +5,7 @@ import aiAgentsAPI from '../../api/aiAgents';
 import AiAgentAssistant from './AiAgentAssistant.vue';
 import AiAgentVersionDiff from './AiAgentVersionDiff.vue';
 import AiAgentPlayground from './AiAgentPlayground.vue';
+import AiAgentTools from './AiAgentTools.vue';
 
 const props = defineProps({ agent: { type: Object, required: true } });
 const emit = defineEmits(['updated']);
@@ -772,6 +773,20 @@ const removeBtnClass =
       <p v-if="!form.flow.length" class="text-xs text-slate-400 italic">
         Nenhuma etapa de conversão definida
       </p>
+    </div>
+
+    <!-- Tools section -->
+    <div :class="sectionClass">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="i-lucide-wrench size-4 text-violet-500" />
+        <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">
+          Ferramentas externas
+        </h3>
+        <span class="text-[11px] text-slate-400"
+          >— integrações via webhook chamadas pelo agente</span
+        >
+      </div>
+      <AiAgentTools :agent-id="agent.id" />
     </div>
 
     <!-- Playground section -->

@@ -122,6 +122,10 @@ Rails.application.routes.draw do
             end
             resources :protocols, only: [:index, :create, :update, :destroy],
                                   controller: 'ai_agent_protocols'
+            resources :tools, only: [:index, :show, :create, :update, :destroy],
+                              controller: 'ai_agent_tools' do
+              member { post :test }
+            end
             resources :prompt_versions, only: [:index],
                                         controller: 'ai_agent_prompt_versions'
             resource :schedule, only: [:show, :update],

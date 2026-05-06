@@ -117,6 +117,35 @@ class AiAgentsAPI extends ApiClient {
     return axios.get(`${this.url}/${agentId}/schedule/available_slots`);
   }
 
+  // Tools
+  getTools(agentId) {
+    return axios.get(`${this.url}/${agentId}/tools`);
+  }
+
+  getTool(agentId, toolId) {
+    return axios.get(`${this.url}/${agentId}/tools/${toolId}`);
+  }
+
+  createTool(agentId, data) {
+    return axios.post(`${this.url}/${agentId}/tools`, { tool: data });
+  }
+
+  updateTool(agentId, toolId, data) {
+    return axios.patch(`${this.url}/${agentId}/tools/${toolId}`, {
+      tool: data,
+    });
+  }
+
+  deleteTool(agentId, toolId) {
+    return axios.delete(`${this.url}/${agentId}/tools/${toolId}`);
+  }
+
+  testTool(agentId, toolId, params = {}) {
+    return axios.post(`${this.url}/${agentId}/tools/${toolId}/test`, {
+      params,
+    });
+  }
+
   getMetrics(period = 'week') {
     return axios.get(`${this.url.replace('/ai_agents', '/ai_agent_metrics')}`, {
       params: { period },

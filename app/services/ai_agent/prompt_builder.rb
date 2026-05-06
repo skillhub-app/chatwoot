@@ -33,6 +33,7 @@ class AiAgent::PromptBuilder
     parts << flow_section(p) if p['flow'].present?
     parts << faq_section
     parts << protocol_section
+    parts << tools_section
     parts << scheduling_section
     parts << context_section
 
@@ -136,6 +137,20 @@ class AiAgent::PromptBuilder
       lines << "- #{p.keyword} → #{p.label} (tipo: #{p.protocol_type})"
     end
     lines << "\nIMPORTANTE: Inclua a palavra-chave sozinha em uma linha, sem mais texto após ela."
+    lines.join("\n")
+  end
+
+  def tools_section
+    tools = @agent.tools.active.ordered
+    return nil if tools.empty?
+
+    lines = ['# FERRAMENTAS DISPONÍVEIS']
+    lines << 'Você tem acesso às seguintes ferramentas externas. Use-as quando necessário para obter informações em tempo real ou executar ações:'
+    tools.each do |t|
+      lines << "\n**#{t.name}** — #{t.description}"
+      lines << "Quando usar: #{t.when_to_use}" if t.when_to_use.present?
+    end
+    lines << "\nSempre que uma ferramenta retornar dados, incorpore o resultado naturalmente na sua resposta ao cliente."
     lines.join("\n")
   end
 

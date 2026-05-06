@@ -7,6 +7,8 @@ class AiAgent < ApplicationRecord
   has_many :ai_agent_faqs,            dependent: :destroy
   has_many :ai_agent_conversations,   dependent: :destroy
   has_many :ai_agent_executions,      dependent: :destroy
+  has_many :tools,                    class_name: 'AiAgent::Tool',          dependent: :destroy
+  has_many :tool_executions,          class_name: 'AiAgent::ToolExecution', dependent: :destroy
   has_one  :ai_agent_schedule,        dependent: :destroy
 
   validates :name, presence: true, length: { maximum: 255 }
