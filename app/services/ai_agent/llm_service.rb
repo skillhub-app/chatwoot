@@ -3,7 +3,7 @@ class AiAgent::LlmService
   ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
   GEMINI_URL    = 'https://generativelanguage.googleapis.com/v1beta/models'
 
-  LlmResponse = Struct.new(:type, :text, :tool_calls, keyword_init: true) do
+  LlmResponse = Struct.new(:type, :text, :tool_calls, :raw_parts, keyword_init: true) do
     def text? = type == :text
     def tool_calls? = type == :tool_calls
   end
@@ -14,12 +14,16 @@ class AiAgent::LlmService
     new(agent, prompt, tools: tools).call
   end
 
-  def self.format_tool_call_message(provider, tool_call)
+  def self.format_tool_call_message(provider, tool_call, raw_parts: nil)
     case provider
     when 'anthropic'
       { role: 'assistant', content: [{ type: 'tool_use', id: tool_call.id, name: tool_call.name, input: tool_call.arguments }] }
     when 'gemini'
-      { role: 'model', parts: [{ functionCall: { name: tool_call.name, args: tool_call.arguments } }] }
+      parts = raw_parts || [{ functionCall: { name: tool_call.name, args: tool_call.arguments } }]
+      if raw_parts&.any? { |p| p['thoughtSignature'].present? }
+        Rails.logger.debug "[AiAgent] Gemini thoughtSignature re-sent in model turn message"
+      end
+      { role: 'model', parts: parts }
     else
       { role: 'assistant', content: nil, tool_calls: [{ id: tool_call.id, type: 'function', function: { name: tool_call.name, arguments: tool_call.arguments.to_json } }] }
     end
@@ -30,7 +34,9 @@ class AiAgent::LlmService
     when 'anthropic'
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: tool_call_id, content: result_text }] }
     when 'gemini'
-      { role: 'user', parts: [{ functionResponse: { name: tool_name, response: { result: result_text } } }] }
+      fn_response = { name: tool_name, response: { result: result_text } }
+      fn_response[:id] = tool_call_id if tool_call_id.present?
+      { role: 'user', parts: [{ functionResponse: fn_response }] }
     else
       { role: 'tool', tool_call_id: tool_call_id, name: tool_name, content: result_text }
     end
@@ -100,9 +106,9 @@ class AiAgent::LlmService
                end
         ToolCall.new(id: tc['id'], name: tc.dig('function', 'name'), arguments: args)
       end
-      LlmResponse.new(type: :tool_calls, text: nil, tool_calls: calls)
+      LlmResponse.new(type: :tool_calls, text: nil, tool_calls: calls, raw_parts: nil)
     else
-      LlmResponse.new(type: :text, text: message['content'].to_s.strip, tool_calls: [])
+      LlmResponse.new(type: :text, text: message['content'].to_s.strip, tool_calls: [], raw_parts: nil)
     end
   end
 
@@ -141,10 +147,10 @@ class AiAgent::LlmService
 
     if tool_use_block
       call = ToolCall.new(id: tool_use_block['id'], name: tool_use_block['name'], arguments: tool_use_block['input'] || {})
-      LlmResponse.new(type: :tool_calls, text: nil, tool_calls: [call])
+      LlmResponse.new(type: :tool_calls, text: nil, tool_calls: [call], raw_parts: nil)
     else
       text = content_blocks.find { |b| b['type'] == 'text' }&.dig('text').to_s.strip
-      LlmResponse.new(type: :text, text: text, tool_calls: [])
+      LlmResponse.new(type: :text, text: text, tool_calls: [], raw_parts: nil)
     end
   end
 
@@ -159,6 +165,9 @@ class AiAgent::LlmService
     end
 
     contents = @prompt[:messages].map do |m|
+      # Messages already in Gemini wire format (tool call/result turns) pass through unchanged
+      next m if m.key?(:parts)
+
       role = m[:role] == 'assistant' ? 'model' : 'user'
       { role: role, parts: [{ text: m[:content].to_s }] }
     end
@@ -184,16 +193,20 @@ class AiAgent::LlmService
 
     raise "Gemini error: #{response.body}" unless response.success?
 
-    parts = response.body.dig('candidates', 0, 'content', 'parts') || []
-    fn_call = parts.find { |p| p['functionCall'].present? }
+    raw_parts = response.body.dig('candidates', 0, 'content', 'parts') || []
+    fn_call   = raw_parts.find { |p| p['functionCall'].present? }
 
     if fn_call
-      fc   = fn_call['functionCall']
-      call = ToolCall.new(id: SecureRandom.hex(8), name: fc['name'], arguments: fc['args'] || {})
-      LlmResponse.new(type: :tool_calls, text: nil, tool_calls: [call])
+      fc  = fn_call['functionCall']
+      id  = fc['id'].presence || SecureRandom.hex(8)
+      has_sig = fn_call['thoughtSignature'].present?
+      Rails.logger.debug "[AiAgent] Gemini functionCall name=#{fc['name']} id=#{id} thoughtSignature=#{has_sig}"
+      Rails.logger.debug "[AiAgent] Gemini thoughtSignature captured (#{fn_call['thoughtSignature'].length} chars)" if has_sig
+      call = ToolCall.new(id: id, name: fc['name'], arguments: fc['args'] || {})
+      LlmResponse.new(type: :tool_calls, text: nil, tool_calls: [call], raw_parts: raw_parts)
     else
-      text = parts.map { |p| p['text'] }.compact.join.strip
-      LlmResponse.new(type: :text, text: text, tool_calls: [])
+      text = raw_parts.map { |p| p['text'] }.compact.join.strip
+      LlmResponse.new(type: :text, text: text, tool_calls: [], raw_parts: nil)
     end
   end
 

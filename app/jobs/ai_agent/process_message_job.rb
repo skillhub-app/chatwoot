@@ -104,7 +104,7 @@ class AiAgent::ProcessMessageJob < ApplicationJob
       response.tool_calls.each do |tool_call|
         tool = active_tools.find { |t| t.name == tool_call.name }
 
-        messages << AiAgent::LlmService.format_tool_call_message(agent.llm_provider, tool_call)
+        messages << AiAgent::LlmService.format_tool_call_message(agent.llm_provider, tool_call, raw_parts: response.raw_parts)
 
         if tool.nil?
           Rails.logger.warn "[AiAgent] Tool '#{tool_call.name}' not found or inactive for agent=#{agent.id}"
