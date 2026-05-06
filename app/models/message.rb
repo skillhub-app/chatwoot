@@ -336,6 +336,9 @@ class Message < ApplicationRecord
 
   def pause_ai_on_human_response
     return unless human_response?
+    # If the inbox has an agent bot connected, outgoing messages are from the bot
+    # (even when sent via user token), so we must not disable the AI automatically.
+    return if conversation.inbox.agent_bot_inbox&.agent_bot.present?
 
     agent             = ::AiAgent.find_by(inbox: conversation.inbox, active: true)
     reactivation_cmd  = agent&.reactivation_command.to_s.strip
