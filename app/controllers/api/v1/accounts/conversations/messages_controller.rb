@@ -6,11 +6,19 @@ class Api::V1::Accounts::Conversations::MessagesController < Api::V1::Accounts::
   end
 
   def create
-    user = Current.user || @resource
-    mb = Messages::MessageBuilder.new(user, @conversation, params)
-    @message = mb.perform
+    begin
+      user = Current.user || @resource
+      mb = Messages::MessageBuilder.new(user, @conversation, params)
+      @message = mb.perform
+    rescue StandardError => e
+      Rails.logger.error "[MessagesController#create] caught: #{e.class.name}: #{e.message}"
+      Rails.logger.error e.backtrace.first(20).join("\n")
+      render_could_not_create_error(e.message)
+    end
   rescue StandardError => e
-    render_could_not_create_error(e.message)
+    Rails.logger.error "[MessagesController#create OUTER] caught: #{e.class.name}: #{e.message}"
+    Rails.logger.error e.backtrace.first(20).join("\n")
+    raise
   end
 
   def update
