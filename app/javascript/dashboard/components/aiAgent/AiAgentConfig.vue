@@ -63,6 +63,7 @@ const form = ref({
   tts_api_key_encrypted: '',
   reactivation_command: props.agent.reactivation_command || '/ia',
   message_chunk_size: props.agent.message_chunk_size || 300,
+  memory_window_messages: props.agent.memory_window_messages ?? 100,
 });
 
 watch(
@@ -84,6 +85,7 @@ watch(
       tts_api_key_encrypted: '',
       reactivation_command: a.reactivation_command || '/ia',
       message_chunk_size: a.message_chunk_size || 300,
+      memory_window_messages: a.memory_window_messages ?? 100,
     };
   }
 );
@@ -110,6 +112,23 @@ async function save() {
     error.value = 'Erro ao salvar configurações.';
   } finally {
     saving.value = false;
+  }
+}
+
+const showResetConfirm = ref(false);
+const resetting = ref(false);
+
+async function resetMemory() {
+  if (!showResetConfirm.value) {
+    showResetConfirm.value = true;
+    return;
+  }
+  resetting.value = true;
+  showResetConfirm.value = false;
+  try {
+    await aiAgentsAPI.resetMemory(props.agent.id);
+  } finally {
+    resetting.value = false;
   }
 }
 
@@ -294,6 +313,52 @@ const labelClass =
           <p class="text-[11px] text-slate-400 mt-1">
             Mensagens longas são divididas em partes aproximadas deste tamanho.
           </p>
+        </div>
+        <div>
+          <label :class="labelClass">Janela de memória (mensagens)</label>
+          <input
+            v-model.number="form.memory_window_messages"
+            type="number"
+            min="10"
+            max="500"
+            :class="inputClass"
+          />
+          <p class="text-[11px] text-slate-400 mt-1">
+            Quantas mensagens passadas o agente lembra (10–500).
+          </p>
+        </div>
+      </div>
+
+      <!-- Reset memory -->
+      <div class="pt-2 border-t border-slate-100 dark:border-slate-700">
+        <div v-if="!showResetConfirm" class="flex items-center gap-2">
+          <button
+            class="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 transition-colors"
+            :disabled="resetting"
+            @click="resetMemory"
+          >
+            <span class="i-lucide-trash-2 size-3.5" />
+            Resetar memória de todas as conversas
+          </button>
+        </div>
+        <div v-else class="flex items-center gap-3">
+          <span class="text-xs text-red-600 font-medium">
+            Vai apagar a memória do agente em TODAS as conversas. As mensagens
+            permanecem no Chatwoot. Confirmar?
+          </span>
+          <button
+            class="text-xs font-semibold text-white bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg transition-colors"
+            :disabled="resetting"
+            @click="resetMemory"
+          >
+            {{ resetting ? 'Apagando...' : 'Confirmar' }}
+          </button>
+          <button
+            class="text-xs text-slate-500 hover:text-slate-700 transition-colors"
+            @click="showResetConfirm = false"
+          >
+            Cancelar
+          </button>
         </div>
       </div>
     </div>

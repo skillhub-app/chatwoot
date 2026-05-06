@@ -96,6 +96,10 @@ class ConversationApi extends ApiClient {
     return axios.post(`${this.url}/${conversationId}/unmute`);
   }
 
+  resetAiMemory(conversationId) {
+    return axios.post(`${this.url}/${conversationId}/reset_ai_memory`);
+  }
+
   meta({ inboxId, status, assigneeType, labels, teamId, conversationType }) {
     return axios.get(`${this.url}/meta`, {
       params: {

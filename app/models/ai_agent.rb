@@ -14,6 +14,7 @@ class AiAgent < ApplicationRecord
   validates :name, presence: true, length: { maximum: 255 }
   validates :inbox_id, uniqueness: { scope: :account_id }, allow_nil: true
   validates :message_buffer_seconds, numericality: { greater_than_or_equal_to: 10 }
+  validates :memory_window_messages, numericality: { in: 10..500 }
 
   scope :active,   -> { where(active: true) }
   scope :inactive, -> { where(active: false) }

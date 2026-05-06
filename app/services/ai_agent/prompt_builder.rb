@@ -1,6 +1,5 @@
 class AiAgent::PromptBuilder
-  MAX_HISTORY = 30
-  MAX_FAQS    = 60
+  MAX_FAQS = 60
 
   def self.build(agent, conversation, new_messages)
     new(agent, conversation, new_messages).build
@@ -208,7 +207,7 @@ class AiAgent::PromptBuilder
                            .where(private: false)
                            .where.not(content_type: :activity)
                            .order(:created_at)
-                           .last(MAX_HISTORY)
+                           .last(@agent.memory_window_messages)
 
     history.filter_map do |msg|
       next if msg.content.blank?

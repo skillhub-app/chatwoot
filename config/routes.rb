@@ -115,6 +115,7 @@ Rails.application.routes.draw do
               post  :playground
               post  :prompt_assistant
               get   :export
+              post  :reset_memory
             end
             resources :faqs, only: [:index, :create, :update, :destroy],
                              controller: 'ai_agent_faqs' do
@@ -252,6 +253,7 @@ Rails.application.routes.draw do
               get :attachments
               get :inbox_assistant
               get :reporting_events if ChatwootApp.enterprise?
+              post :reset_ai_memory
             end
           end
 

@@ -138,6 +138,12 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
     @conversation.save!
   end
 
+  def reset_ai_memory
+    executions_count    = AiAgentExecution.where(conversation: @conversation).delete_all
+    conversations_count = AiAgentConversation.where(conversation: @conversation).delete_all
+    render json: { deleted: { executions: executions_count, conversations: conversations_count } }
+  end
+
   def destroy
     authorize @conversation, :destroy?
     ::DeleteObjectJob.perform_later(@conversation, Current.user, request.ip)

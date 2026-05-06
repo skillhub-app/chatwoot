@@ -55,6 +55,10 @@ class AiAgentsAPI extends ApiClient {
     });
   }
 
+  resetMemory(id) {
+    return axios.post(`${this.url}/${id}/reset_memory`);
+  }
+
   getPromptVersions(agentId) {
     return axios.get(`${this.url}/${agentId}/prompt_versions`);
   }
