@@ -1,4 +1,10 @@
 class AiAgent < ApplicationRecord
+  ALLOWED_MODELS_BY_PROVIDER = {
+    'openai' => %w[gpt-4o gpt-4o-mini gpt-4-turbo],
+    'anthropic' => %w[claude-opus-4-7 claude-sonnet-4-6 claude-haiku-4-5-20251001],
+    'gemini' => %w[gemini-2.0-flash gemini-2.0-flash-lite gemini-1.5-pro gemini-1.5-flash gemini-3-flash-preview],
+  }.freeze
+
   belongs_to :account
   belongs_to :inbox, optional: true
 
@@ -15,6 +21,7 @@ class AiAgent < ApplicationRecord
   validates :inbox_id, uniqueness: { scope: :account_id }, allow_nil: true
   validates :message_buffer_seconds, numericality: { greater_than_or_equal_to: 10 }
   validates :memory_window_messages, numericality: { in: 10..500 }
+  validate :llm_model_must_be_allowed_for_provider
 
   scope :active,   -> { where(active: true) }
   scope :inactive, -> { where(active: false) }
@@ -35,5 +42,26 @@ class AiAgent < ApplicationRecord
 
   def has_draft?
     prompt_draft.present? && prompt_draft.any?
+  end
+
+  private
+
+  def llm_model_must_be_allowed_for_provider
+    return if llm_provider.blank? || llm_model.blank?
+
+    allowed = ALLOWED_MODELS_BY_PROVIDER[llm_provider]
+
+    if allowed.nil?
+      errors.add(:llm_provider, 'não é um provider suportado')
+      return
+    end
+
+    return if allowed.include?(llm_model)
+
+    errors.add(
+      :llm_model,
+      "'#{llm_model}' não é suportado para o provider " \
+      "'#{llm_provider}'. Modelos válidos: #{allowed.join(', ')}"
+    )
   end
 end
