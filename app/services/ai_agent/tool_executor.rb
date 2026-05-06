@@ -71,11 +71,11 @@ class AiAgent::ToolExecutor
 
     return base if @tool.request_body_template.blank?
 
-    rendered = @tool.request_body_template.dup
-    base.each { |k, v| rendered.gsub!("{{ #{k} }}", v.to_s) }
+    rendered = render_template(@tool.request_body_template, base)
     begin
       JSON.parse(rendered)
     rescue JSON::ParserError
+      Rails.logger.error "[ToolExecutor] template JSON inválido após render para tool='#{@tool.name}'"
       base
     end
   end
@@ -86,9 +86,25 @@ class AiAgent::ToolExecutor
   end
 
   def format_output(output)
-    return @tool.response_template.gsub(/\{\{\s*(\w+)\s*\}\}/) { output[$1].to_s } if @tool.response_template.present?
+    return render_template(@tool.response_template, output) if @tool.response_template.present?
 
     output.to_json
+  end
+
+  # Substitui {{ key }} e {{key}} (com ou sem espaços) em qualquer template string.
+  # Suporta dot notation: {{ a.b }} faz dig('a', 'b') no hash de vars.
+  # Placeholder sem valor correspondente vira "" e gera warning no log.
+  def render_template(template, vars)
+    template.gsub(/\{\{\s*([\w.]+)\s*\}\}/) do
+      path  = $1.split('.')
+      value = vars.dig(*path)
+      if value.nil?
+        Rails.logger.warn "[ToolExecutor] placeholder sem valor: '#{$1}' tool='#{@tool.name}'"
+        ''
+      else
+        value.to_s
+      end
+    end
   end
 
   def log_execution(result)
