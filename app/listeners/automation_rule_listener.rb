@@ -31,7 +31,10 @@ class AutomationRuleListener < BaseListener
     rules.each do |rule|
       conditions_match = ::AutomationRules::ConditionsFilterService.new(rule, message.conversation,
                                                                         { message: message, changed_attributes: changed_attributes }).perform
-      ::AutomationRules::ActionService.new(rule, account, message.conversation).perform if conditions_match.present?
+      next unless conditions_match.present?
+      next unless kanban_conditions_match?(rule, message.conversation)
+
+      ::AutomationRules::ActionService.new(rule, account, message.conversation).perform
     end
   end
 
@@ -61,7 +64,10 @@ class AutomationRuleListener < BaseListener
     rules.each do |rule|
       conditions_match = ::AutomationRules::ConditionsFilterService.new(rule, conversation,
                                                                         { changed_attributes: changed_attributes }).perform
-      AutomationRules::ActionService.new(rule, account, conversation, { ai_enabled: ai_enabled }).perform if conditions_match.present?
+      next unless conditions_match.present?
+      next unless kanban_conditions_match?(rule, conversation)
+
+      AutomationRules::ActionService.new(rule, account, conversation, { ai_enabled: ai_enabled }).perform
     end
   end
 
@@ -81,7 +87,10 @@ class AutomationRuleListener < BaseListener
 
     rules.each do |rule|
       conditions_match = ::AutomationRules::ConditionsFilterService.new(rule, conversation, { changed_attributes: changed_attributes }).perform
-      AutomationRules::ActionService.new(rule, account, conversation).perform if conditions_match.present?
+      next unless conditions_match.present?
+      next unless kanban_conditions_match?(rule, conversation)
+
+      AutomationRules::ActionService.new(rule, account, conversation).perform
     end
   end
 
@@ -97,6 +106,12 @@ class AutomationRuleListener < BaseListener
       account_id: account.id,
       active: true
     )
+  end
+
+  def kanban_conditions_match?(rule, conversation)
+    return true unless AutomationRules::KanbanConditionsService.has_kanban_conditions?(rule)
+
+    AutomationRules::KanbanConditionsService.new(rule, conversation).perform
   end
 
   def performed_by_automation?(event)

@@ -66,4 +66,20 @@ class AutomationRules::ActionService < ActionService
       @account.increment_email_sent_count
     end
   end
+
+  def move_kanban_stage(params)
+    stage_id = Array(params).first.to_i
+    return unless stage_id.positive?
+
+    item = KanbanItem.find_by(conversation_id: @conversation.id)
+    return unless item
+
+    new_stage = KanbanStage.find_by(id: stage_id)
+    return unless new_stage
+
+    old_stage_id = item.stage_id
+    Kanban::CancelAutomationsService.new(item, old_stage_id).perform
+    item.update!(stage_id: stage_id, pipeline_id: new_stage.pipeline_id)
+    Kanban::AutomationSchedulerService.new(item, new_stage).perform
+  end
 end

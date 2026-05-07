@@ -460,9 +460,17 @@ class Kanban::ExecuteActionService
       pipeline_id = action['pipeline_id']&.to_i
       return unless stage_id&.positive?
 
+      new_stage = KanbanStage.find_by(id: stage_id)
+      return unless new_stage
+
+      old_stage_id = @item.stage_id
       attrs = { stage_id: stage_id }
       attrs[:pipeline_id] = pipeline_id if pipeline_id&.positive?
+
+      Kanban::CancelAutomationsService.new(@item, old_stage_id).perform
       @item.update!(attrs)
+      Kanban::AutomationSchedulerService.new(@item, new_stage).perform
+
       executed << { type: 'move_item', stage_id: stage_id }
       log_activity('automation_crm_moved', stage_id: stage_id, pipeline_id: pipeline_id)
 
