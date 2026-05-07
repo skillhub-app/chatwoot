@@ -5,6 +5,14 @@
 
 ---
 
+## Histórico de Versões Relevantes
+
+- **v1.0.0.45** — Memory window config (`memory_window_messages` 10–500) + reset de memória por agente e por conversa.
+- **v1.0.0.46** — Adapter Gemini refatorado: preserva `thoughtSignature` e `id` real do `functionCall` entre iterações do loop agêntico. Corrigiu bug latente em Gemini 2.0 (multi-turn com tools estava quebrado silenciosamente). Detecção automática por presença de campo, sem if/else por modelo.
+- **v1.0.0.47** — Suporte completo a Gemini 3 Flash (Preview) com function calling em multi-turn. `gemini-3-flash-preview` adicionado ao dropdown. Validação backend `ALLOWED_MODELS_BY_PROVIDER` no model `AiAgent` rejeita modelos fora da lista com 422 e mensagem clara.
+
+---
+
 ## Identidade do Projeto
 
 - **Nome**: Chatwoot-Volponi
