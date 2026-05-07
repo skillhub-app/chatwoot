@@ -143,6 +143,9 @@ Rails.application.routes.draw do
           get 'ai_agent_metrics', to: 'ai_agent_metrics#index'
           namespace :kanban do
             get 'items', to: 'global_items#index'
+            resources :items, only: [] do
+              member { post 'notes', to: 'kanban/notes#external_create' }
+            end
             scope :gamification, controller: 'gamification' do
               get :rankings
               get :overview
