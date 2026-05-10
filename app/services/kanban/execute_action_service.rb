@@ -224,9 +224,61 @@ class Kanban::ExecuteActionService
   end
 
   def generate_ai_message
-    stage_name    = @automation.trigger_stage&.name
-    contact_name  = @item.contact&.name || @item.contact_phone
-    "Olá#{contact_name ? ", #{contact_name.split.first}" : ''}! Estamos acompanhando seu processo na etapa \"#{stage_name}\". Podemos te ajudar com algo?"
+    agent = @item.account.ai_agents.active.first
+    if agent.nil?
+      Rails.logger.error "[FollowUpAI] Conta #{@item.account_id} sem agente IA ativo"
+      raise "Conta #{@item.account_id} não tem agente IA ativo configurado"
+    end
+
+    conversation = find_conversation_for_message
+    messages_history = build_followup_history(conversation)
+
+    rascunho = @config['ai_prompt'].to_s.strip
+    intention_block = rascunho.present? ? "INTENÇÃO DO OPERADOR:\n#{rascunho}\n\n" : ''
+
+    system_prompt = <<~PROMPT.strip
+      Você é #{agent.name}, atendente#{agent.company.present? ? " do escritório #{agent.company}" : ''}.
+
+      Sua tarefa é gerar UMA mensagem curta de follow-up via WhatsApp para um lead, com base no histórico de conversa anterior.
+
+      #{intention_block}REGRAS OBRIGATÓRIAS:
+      - Mensagem DEVE ter no máximo 500 caracteres
+      - Mensagem DEVE ter no máximo 4 linhas
+      - Tom: natural, amigável, profissional
+      - Linguagem: português brasileiro
+      - NÃO use markdown (sem *, _, #, etc — WhatsApp não renderiza)
+      - NÃO se apresente de novo se já houver histórico
+      - Continue a conversa de onde parou
+      - Se o histórico estiver vazio: faça um cold follow-up polido
+      - Retorne APENAS o texto da mensagem, sem prefixos tipo "Mensagem:" ou "Resposta:"
+    PROMPT
+
+    response = AiAgent::LlmService.call(agent, { system: system_prompt, messages: messages_history }, tools: [])
+
+    if response.text.blank?
+      Rails.logger.error "[FollowUpAI] LLM retornou mensagem vazia para item #{@item.id}"
+      raise "LLM retornou mensagem vazia"
+    end
+
+    text = response.text.strip.first(4000)
+    Rails.logger.info "[FollowUpAI] Gerada mensagem de #{text.length} chars para item #{@item.id}"
+    text
+  end
+
+  def build_followup_history(conversation)
+    return [] unless conversation
+
+    conversation.messages
+                .where(message_type: %i[incoming outgoing])
+                .where(private: false)
+                .where.not(content_type: :activity)
+                .order(:created_at)
+                .last(20)
+                .filter_map do |msg|
+                  next if msg.content.blank?
+
+                  { role: msg.message_type == 'incoming' ? 'user' : 'assistant', content: msg.content }
+                end
   end
 
   # ── Webhook ─────────────────────────────────────────────────────────────────
