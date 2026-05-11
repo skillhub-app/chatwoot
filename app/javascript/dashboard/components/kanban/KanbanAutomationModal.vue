@@ -726,7 +726,7 @@ function openStopConditions(stageId) {
 
               <div v-if="actionForm.config.use_ai">
                 <label class="text-xs text-slate-500 mb-1 block"
-                  >Instrução para IA</label
+                  >Rascunho / intenção (opcional)</label
                 >
                 <textarea
                   v-model="actionForm.config.ai_prompt"
