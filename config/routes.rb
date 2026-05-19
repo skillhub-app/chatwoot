@@ -144,7 +144,7 @@ Rails.application.routes.draw do
           namespace :kanban do
             get 'items', to: 'global_items#index'
             resources :items, only: [] do
-              member { post 'notes', to: 'kanban/notes#external_create' }
+              member { post 'notes', to: 'notes#external_create' }
             end
             scope :gamification, controller: 'gamification' do
               get :rankings
