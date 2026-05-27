@@ -43,6 +43,16 @@ class AiAgent::ProtocolExecutor
       content:      "📋 *Resumo do atendimento IA:*\n#{@summary_text}",
       private:      true
     )
+
+    kanban_item = KanbanItem.find_by(conversation_id: @conversation.id)
+    return unless kanban_item
+
+    kanban_item.kanban_notes.create!(
+      content: "📋 Resumo do atendimento IA:\n#{@summary_text}",
+      author:  @conversation.account.users.first
+    )
+  rescue StandardError => e
+    Rails.logger.error "[ProtocolExecutor] Failed to save summary: #{e.message}"
   end
 
   def notify_phone
