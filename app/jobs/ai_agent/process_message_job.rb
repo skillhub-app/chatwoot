@@ -58,7 +58,8 @@ class AiAgent::ProcessMessageJob < ApplicationJob
                      protocol: protocol, status: 'success')
 
     if protocol
-      AiAgent::ProtocolExecutor.execute(protocol, conversation, agent, summary_text: clean_response)
+      summary = protocol.auto_summarize ? AiAgent::ConversationSummaryService.call(agent, conversation) : nil
+      AiAgent::ProtocolExecutor.execute(protocol, conversation, agent, summary_text: summary)
       AiAgent::MessageHumanizer.send_response(conversation, clean_response, agent: agent) if clean_response.present?
     else
       AiAgent::MessageHumanizer.send_response(conversation, clean_response, agent: agent)
