@@ -87,4 +87,48 @@ RSpec.describe AiAgent::ProtocolExecutor do
       end
     end
   end
+
+  describe '#notify_phone (via execute)' do
+    let(:protocol_with_phone) do
+      AiAgentProtocol.create!(
+        ai_agent: agent, protocol_type: 'human', label: 'Humano',
+        keyword: '#HUMANO', auto_summarize: true, position: 0,
+        phone_number: '+5511999990000'
+      )
+    end
+
+    context 'com phone_number e summary_text presentes' do
+      it 'chama ProtocolNotificationService' do
+        expect(AiAgent::ProtocolNotificationService).to receive(:call).with(
+          phone:   '+5511999990000',
+          summary: 'Resumo.',
+          account: conversation.account
+        )
+        described_class.execute(protocol_with_phone, conversation, agent, summary_text: 'Resumo.')
+      end
+    end
+
+    context 'com summary_text nil' do
+      it 'não chama ProtocolNotificationService' do
+        expect(AiAgent::ProtocolNotificationService).not_to receive(:call)
+        described_class.execute(protocol_with_phone, conversation, agent, summary_text: nil)
+      end
+    end
+
+    context 'sem phone_number no protocolo' do
+      it 'não chama ProtocolNotificationService' do
+        expect(AiAgent::ProtocolNotificationService).not_to receive(:call)
+        described_class.execute(protocol, conversation, agent, summary_text: 'Resumo.')
+      end
+    end
+
+    context 'ProtocolNotificationService levanta exceção' do
+      it 'não propaga o erro' do
+        allow(AiAgent::ProtocolNotificationService).to receive(:call).and_raise(StandardError, 'network error')
+        expect {
+          described_class.execute(protocol_with_phone, conversation, agent, summary_text: 'Resumo.')
+        }.not_to raise_error
+      end
+    end
+  end
 end
