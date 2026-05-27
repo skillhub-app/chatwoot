@@ -56,6 +56,15 @@ class AiAgent::ProtocolExecutor
   end
 
   def notify_phone
-    Rails.logger.info "[AiAgent] Protocol #{@protocol.label} triggered — notify #{@protocol.phone_number}"
+    return if @protocol.phone_number.blank?
+    return if @summary_text.blank?
+
+    AiAgent::ProtocolNotificationService.call(
+      phone:   @protocol.phone_number,
+      summary: @summary_text,
+      account: @conversation.account
+    )
+  rescue StandardError => e
+    Rails.logger.error "[ProtocolExecutor] notify_phone failed: #{e.message}"
   end
 end
