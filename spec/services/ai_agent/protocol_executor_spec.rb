@@ -29,6 +29,133 @@ RSpec.describe AiAgent::ProtocolExecutor do
 
   before { create(:account_user, account: account, user: user) }
 
+  let(:ai_conv) do
+    AiAgentConversation.create!(
+      ai_agent: agent, conversation: conversation,
+      contact: conversation.contact, state: 'active'
+    )
+  end
+
+  describe '#apply_action (via execute)' do
+    context "action='continue'" do
+      let(:protocol) do
+        AiAgentProtocol.create!(
+          ai_agent: agent, protocol_type: 'qualified', label: 'Qualificado',
+          keyword: '#QUALIFICADO', auto_summarize: false, position: 0, action: 'continue'
+        )
+      end
+
+      before { ai_conv }
+
+      it 'não altera state da ai_agent_conversation' do
+        expect { described_class.execute(protocol, conversation, agent) }
+          .not_to(change { ai_conv.reload.state })
+      end
+
+      it 'gera resumo quando auto_summarize=true' do
+        protocol.update!(auto_summarize: true)
+        expect {
+          described_class.execute(protocol, conversation, agent, summary_text: 'Resumo.')
+        }.to change { conversation.messages.where(private: true).count }.by(1)
+      end
+
+      it 'envia notificação UAZAPI quando phone_number presente' do
+        protocol.update!(phone_number: '+5511999990000', auto_summarize: false)
+        allow(AiAgent::ProtocolNotificationService).to receive(:call)
+        described_class.execute(protocol, conversation, agent, summary_text: 'Resumo.')
+        expect(AiAgent::ProtocolNotificationService).to have_received(:call)
+      end
+    end
+
+    context "action='pause_for_human'" do
+      let(:protocol) do
+        AiAgentProtocol.create!(
+          ai_agent: agent, protocol_type: 'human', label: 'Humano',
+          keyword: '#HUMANO', auto_summarize: false, position: 0, action: 'pause_for_human'
+        )
+      end
+
+      before { ai_conv }
+
+      it "muda state para 'transferred'" do
+        described_class.execute(protocol, conversation, agent)
+        expect(ai_conv.reload.state).to eq('transferred')
+      end
+
+      it 'grava paused_reason com tipo do protocolo' do
+        described_class.execute(protocol, conversation, agent)
+        expect(ai_conv.reload.paused_reason).to eq('protocol:human')
+      end
+
+      it 'remove ia_ligada e adiciona ia_desligada' do
+        conversation.labels.push('ia_ligada')
+        described_class.execute(protocol, conversation, agent)
+        expect(conversation.reload.label_list).to include('ia_desligada')
+        expect(conversation.reload.label_list).not_to include('ia_ligada')
+      end
+    end
+
+    context "action='end_conversation'" do
+      let(:protocol) do
+        AiAgentProtocol.create!(
+          ai_agent: agent, protocol_type: 'unqualified', label: 'Desqualificado',
+          keyword: '#DESQ', auto_summarize: false, position: 0, action: 'end_conversation'
+        )
+      end
+
+      before { ai_conv }
+
+      it "muda state para 'ended'" do
+        described_class.execute(protocol, conversation, agent)
+        expect(ai_conv.reload.state).to eq('ended')
+      end
+
+      it 'adiciona etiqueta atendimento_encerrado' do
+        described_class.execute(protocol, conversation, agent)
+        expect(conversation.reload.label_list).to include('atendimento_encerrado')
+      end
+
+      it 'adiciona ia_desligada' do
+        described_class.execute(protocol, conversation, agent)
+        expect(conversation.reload.label_list).to include('ia_desligada')
+      end
+    end
+
+    context "action='pause_temporary'" do
+      let(:protocol) do
+        AiAgentProtocol.create!(
+          ai_agent: agent, protocol_type: 'custom', label: 'Temp',
+          keyword: '#TEMP', auto_summarize: false, position: 0, action: 'pause_temporary'
+        )
+      end
+
+      before { ai_conv }
+
+      it "muda state para 'paused'" do
+        described_class.execute(protocol, conversation, agent)
+        expect(ai_conv.reload.state).to eq('paused')
+      end
+    end
+
+    context 'default action em protocolo recém-criado' do
+      it "é 'pause_for_human'" do
+        p = AiAgentProtocol.create!(
+          ai_agent: agent, protocol_type: 'human', label: 'H',
+          keyword: '#H', auto_summarize: false, position: 0
+        )
+        expect(p.action).to eq('pause_for_human')
+      end
+    end
+
+    context 'sem ai_agent_conversation existente' do
+      it 'não levanta erro' do
+        expect {
+          described_class.execute(protocol, conversation, agent)
+        }.not_to raise_error
+      end
+    end
+  end
+
   describe '#send_summary (via execute)' do
     context 'com kanban_item vinculado à conversa' do
       let!(:kanban_item) do
