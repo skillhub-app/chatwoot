@@ -1,50 +1,87 @@
 <!-- eslint-disable vue/no-bare-strings-in-template -->
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue';
-import { useStore } from 'vuex';
+import { ref, computed, onMounted } from 'vue';
 import ConversationApi from 'dashboard/api/inbox/conversation';
 
 const props = defineProps({
   conversationId: { type: [Number, String], required: true },
 });
 
-const store = useStore();
 const loading = ref(false);
-const enabled = ref(null);
+const aiConv = ref(null);
 const resettingMemory = ref(false);
 const showResetConfirm = ref(false);
 const resetDone = ref(false);
 
-const conversationLabels = computed(
-  () =>
-    store.getters['conversationLabels/getConversationLabels'](
-      props.conversationId
-    ) || []
-);
+const STATE_INFO = {
+  active: {
+    toggleOn: true,
+    locked: false,
+    badge: null,
+  },
+  transferred: {
+    toggleOn: false,
+    locked: false,
+    badge: {
+      icon: 'i-lucide-user-round-cog',
+      text: 'IA pausada — aguardando humano',
+      buttonLabel: 'Reativar IA',
+    },
+  },
+  paused: {
+    toggleOn: false,
+    locked: false,
+    badge: {
+      icon: 'i-lucide-pause-circle',
+      text: 'IA pausada manualmente',
+      buttonLabel: 'Reativar IA',
+    },
+  },
+  ended: {
+    toggleOn: false,
+    locked: true,
+    badge: {
+      icon: 'i-lucide-lock',
+      text: 'Atendimento encerrado',
+      buttonLabel: 'Reabrir atendimento',
+    },
+  },
+};
 
-function deriveState() {
-  if (conversationLabels.value.includes('ia_desligada')) {
-    enabled.value = false;
-  } else if (conversationLabels.value.includes('ia_ligada')) {
-    enabled.value = true;
-  } else {
-    enabled.value = null;
+const stateInfo = computed(() => {
+  const state = aiConv.value?.state;
+  return STATE_INFO[state] ?? { toggleOn: false, locked: false, badge: null };
+});
+
+async function loadState() {
+  try {
+    const { data } = await ConversationApi.getAiAgentState(
+      props.conversationId
+    );
+    aiConv.value = data;
+  } catch {
+    aiConv.value = null;
   }
 }
 
-async function toggle() {
+async function toggleAi(newValue) {
   loading.value = true;
-  const next = !enabled.value;
-  const addLabel = next ? 'ia_ligada' : 'ia_desligada';
-  const removeLabel = next ? 'ia_desligada' : 'ia_ligada';
-  const current = conversationLabels.value.filter(l => l !== removeLabel);
-  if (!current.includes(addLabel)) current.push(addLabel);
+  const state = newValue ? 'active' : 'paused';
   try {
-    await store.dispatch('conversationLabels/update', {
-      conversationId: props.conversationId,
-      labels: current,
-    });
-    enabled.value = next;
+    await ConversationApi.updateAiAgentState(props.conversationId, state);
+    await loadState();
+  } catch {
+    // ignore
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function reactivate() {
+  loading.value = true;
+  try {
+    await ConversationApi.reactivateAiAgent(props.conversationId);
+    await loadState();
   } catch {
     // ignore
   } finally {
@@ -70,8 +107,7 @@ async function resetMemory() {
   }
 }
 
-watch(conversationLabels, deriveState);
-onMounted(deriveState);
+onMounted(loadState);
 </script>
 
 <template>
@@ -79,7 +115,7 @@ onMounted(deriveState);
     <div
       class="flex items-center justify-between px-4 py-2.5 rounded-xl border"
       :class="
-        enabled
+        stateInfo.toggleOn
           ? 'border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/20'
           : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'
       "
@@ -88,7 +124,7 @@ onMounted(deriveState);
         <span
           class="size-3.5"
           :class="
-            enabled
+            stateInfo.toggleOn
               ? 'i-lucide-bot text-violet-500'
               : 'i-lucide-bot-off text-slate-400'
           "
@@ -96,29 +132,55 @@ onMounted(deriveState);
         <span class="text-xs font-medium text-slate-700 dark:text-slate-200">
           Agente IA
         </span>
-        <span v-if="enabled === null" class="text-[10px] text-slate-400">
-          (indefinido)
+        <span v-if="aiConv === null" class="text-[10px] text-slate-400">
+          (sem agente)
         </span>
       </div>
 
       <button
         class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 transition-colors duration-200 focus:outline-none disabled:opacity-50"
         :class="
-          enabled
+          stateInfo.toggleOn
             ? 'border-violet-500 bg-violet-500'
             : 'border-slate-300 dark:border-slate-600 bg-slate-200 dark:bg-slate-600'
         "
-        :disabled="loading"
-        @click="toggle"
+        :disabled="loading || stateInfo.locked || aiConv === null"
+        @click="toggleAi(!stateInfo.toggleOn)"
       >
         <span
           class="inline-block size-4 rounded-full bg-white shadow transition-transform duration-200"
-          :class="enabled ? 'translate-x-4' : 'translate-x-0'"
+          :class="stateInfo.toggleOn ? 'translate-x-4' : 'translate-x-0'"
         />
       </button>
     </div>
 
-    <!-- Reset memory for this conversation -->
+    <!-- Badge de estado não-ativo -->
+    <div
+      v-if="stateInfo.badge"
+      class="px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 flex flex-col gap-1.5"
+    >
+      <div class="flex items-center gap-1.5">
+        <span class="size-3.5 text-amber-500" :class="stateInfo.badge.icon" />
+        <span class="text-xs font-medium text-amber-700 dark:text-amber-300">
+          {{ stateInfo.badge.text }}
+        </span>
+      </div>
+      <p
+        v-if="aiConv?.paused_reason"
+        class="text-[11px] text-amber-600 dark:text-amber-400 ml-5"
+      >
+        {{ aiConv.paused_reason }}
+      </p>
+      <button
+        class="ml-5 text-[11px] font-semibold text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-200 transition-colors text-left"
+        :disabled="loading"
+        @click="reactivate"
+      >
+        {{ loading ? 'Aguarde...' : stateInfo.badge.buttonLabel }}
+      </button>
+    </div>
+
+    <!-- Reset memory -->
     <div class="px-1">
       <div
         v-if="resetDone"

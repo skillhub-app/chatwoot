@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import aiAgentsAPI from '../../api/aiAgents';
 
 const props = defineProps({
@@ -19,16 +19,44 @@ const PROTOCOL_TYPES = [
   { value: 'custom', label: 'Personalizado' },
 ];
 
+const PROTOCOL_ACTIONS = [
+  {
+    value: 'continue',
+    label: 'Continuar respondendo',
+    hint: 'A IA continua respondendo mesmo após disparar o protocolo.',
+  },
+  {
+    value: 'pause_for_human',
+    label: 'Pausar para humano assumir',
+    hint: 'A IA para de responder. Operador pode reativar pelo toggle.',
+  },
+  {
+    value: 'end_conversation',
+    label: 'Encerrar atendimento',
+    hint: 'Silêncio total. Nova mensagem do lead não dispara IA.',
+  },
+  {
+    value: 'pause_temporary',
+    label: 'Pausar temporariamente',
+    hint: 'Pausa enquanto o operador analisa a situação.',
+  },
+];
+
 const emptyForm = () => ({
   protocol_type: 'human',
   label: '',
   keyword: '',
   phone_number: '',
   auto_summarize: true,
+  action: 'pause_for_human',
   position: protocols.value.length + 1,
 });
 
 const form = ref(emptyForm());
+
+const actionHint = computed(
+  () => PROTOCOL_ACTIONS.find(a => a.value === form.value.action)?.hint ?? ''
+);
 
 async function load() {
   loading.value = true;
@@ -131,12 +159,18 @@ onMounted(load);
           <p class="text-sm font-medium text-slate-800 dark:text-slate-100">
             {{ p.label }}
           </p>
-          <div class="flex gap-4 mt-1">
+          <div class="flex gap-4 mt-1 flex-wrap">
             <span v-if="p.phone_number" class="text-xs text-slate-500"
               >📞 {{ p.phone_number }}</span
             >
             <span class="text-xs text-slate-500">
-              Resumo automático: {{ p.auto_summarize ? 'sim' : 'não' }}
+              {{
+                PROTOCOL_ACTIONS.find(a => a.value === p.action)?.label ??
+                p.action
+              }}
+            </span>
+            <span v-if="p.auto_summarize" class="text-xs text-slate-500">
+              Resumo: sim
             </span>
           </div>
         </div>
@@ -221,6 +255,25 @@ onMounted(load);
             placeholder="+5511999999999"
             class="border border-slate-300 dark:border-slate-600 rounded px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
           />
+        </div>
+
+        <div class="flex flex-col gap-1">
+          <label class="text-xs font-medium text-slate-600 dark:text-slate-400"
+            >Ação ao acionar este protocolo *</label
+          >
+          <select
+            v-model="form.action"
+            class="border border-slate-300 dark:border-slate-600 rounded px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+          >
+            <option
+              v-for="a in PROTOCOL_ACTIONS"
+              :key="a.value"
+              :value="a.value"
+            >
+              {{ a.label }}
+            </option>
+          </select>
+          <p class="text-xs text-slate-400">{{ actionHint }}</p>
         </div>
 
         <div class="flex items-center gap-2">

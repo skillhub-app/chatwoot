@@ -100,6 +100,22 @@ class ConversationApi extends ApiClient {
     return axios.post(`${this.url}/${conversationId}/reset_ai_memory`);
   }
 
+  getAiAgentState(conversationId) {
+    return axios.get(`${this.url}/${conversationId}/ai_agent_state`);
+  }
+
+  updateAiAgentState(conversationId, state) {
+    return axios.patch(`${this.url}/${conversationId}/ai_agent_state`, {
+      state,
+    });
+  }
+
+  reactivateAiAgent(conversationId) {
+    return axios.post(
+      `${this.url}/${conversationId}/ai_agent_state/reactivate`
+    );
+  }
+
   meta({ inboxId, status, assigneeType, labels, teamId, conversationType }) {
     return axios.get(`${this.url}/meta`, {
       params: {
