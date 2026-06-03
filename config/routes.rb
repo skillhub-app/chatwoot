@@ -242,6 +242,10 @@ Rails.application.routes.draw do
               resource :participants, only: [:show, :create, :update, :destroy]
               resource :direct_uploads, only: [:create]
               resource :draft_messages, only: [:show, :update, :destroy]
+              resource :ai_agent_state, only: [:show, :update],
+                                        controller: 'ai_agent_state' do
+                member { post :reactivate }
+              end
             end
             member do
               post :mute
