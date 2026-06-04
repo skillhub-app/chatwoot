@@ -26,6 +26,14 @@ class AiAgent::ProcessMessageJob < ApplicationJob
   private
 
   def run(agent, conversation, new_messages, started_at)
+    last_was_audio = conversation.messages
+                                 .where(message_type: :incoming)
+                                 .order(created_at: :desc)
+                                 .first
+                                 &.attachments
+                                 &.where(file_type: :audio)
+                                 &.exists? || false
+
     combined_text = new_messages.join(' ')
     injection     = AiAgent::PromptInjectionFilter.blocked?(combined_text)
 
@@ -35,7 +43,8 @@ class AiAgent::ProcessMessageJob < ApplicationJob
       record_execution(agent, conversation, new_messages, blocked_response, duration,
                        status: 'blocked',
                        error_message: "prompt_injection: #{injection[:pattern]}")
-      AiAgent::MessageHumanizer.send_response(conversation, blocked_response, agent: agent)
+      AiAgent::MessageHumanizer.send_response(conversation, blocked_response, agent: agent,
+                                              last_was_audio: last_was_audio)
       return
     end
 
@@ -60,9 +69,11 @@ class AiAgent::ProcessMessageJob < ApplicationJob
     if protocol
       summary = protocol.auto_summarize ? AiAgent::ConversationSummaryService.call(agent, conversation) : nil
       AiAgent::ProtocolExecutor.execute(protocol, conversation, agent, summary_text: summary)
-      AiAgent::MessageHumanizer.send_response(conversation, clean_response, agent: agent) if clean_response.present?
+      AiAgent::MessageHumanizer.send_response(conversation, clean_response, agent: agent,
+                                              last_was_audio: last_was_audio) if clean_response.present?
     else
-      AiAgent::MessageHumanizer.send_response(conversation, clean_response, agent: agent)
+      AiAgent::MessageHumanizer.send_response(conversation, clean_response, agent: agent,
+                                              last_was_audio: last_was_audio)
     end
 
     update_stats(agent, conversation, new_messages.size)
