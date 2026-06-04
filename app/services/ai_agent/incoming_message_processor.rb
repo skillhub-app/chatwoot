@@ -30,6 +30,7 @@ class AiAgent::IncomingMessageProcessor
     return false if @message.private?
     return false if @message.content_type == 'activity'
     return false if message_content.blank?
+    return false if audio_pending_transcription?
     return false if @conversation.label_list.include?('ia_desligada')
 
     @agent = ::AiAgent.find_by(inbox: @inbox, active: true)
@@ -69,5 +70,17 @@ class AiAgent::IncomingMessageProcessor
            .where(file_type: :audio)
            .filter_map { |att| att.meta&.dig('transcribed_text') }
            .join(' ')
+  end
+
+  # Returns true when the message has an audio attachment whose transcription
+  # hasn't been written yet AND the account has audio transcription enabled.
+  # In that case we block processing here and let AudioTranscriptionService
+  # re-call IncomingMessageProcessor once Whisper finishes.
+  def audio_pending_transcription?
+    return false unless @message.account.audio_transcriptions.present?
+
+    @message.attachments
+            .where(file_type: :audio)
+            .any? { |att| att.meta&.dig('transcribed_text').blank? }
   end
 end

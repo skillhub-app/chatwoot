@@ -95,6 +95,7 @@ class Messages::AudioTranscriptionService< Llm::LegacyBaseOpenAiService
     attachment.update!(meta: { transcribed_text: transcribed_text })
     message.reload.send_update_event
     message.account.increment_response_usage
+    AiAgent::IncomingMessageProcessor.call(message)
 
     return unless ChatwootApp.advanced_search_allowed?
 
