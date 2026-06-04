@@ -19,13 +19,20 @@ class AiAgent::TtsService
     end
 
     response = conn.post("#{ELEVENLABS_URL}/#{@agent.tts_voice_id}") do |req|
+      req.params['output_format'] = 'mp3_44100_128'
       req.headers['xi-api-key']   = api_key
       req.headers['Accept']       = 'audio/mpeg'
       req.headers['Content-Type'] = 'application/json'
       req.body = {
         text:           @text,
         model_id:       'eleven_multilingual_v2',
-        voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+        voice_settings: {
+          stability:         0.5,
+          similarity_boost:  0.7,
+          style:             0.0,
+          use_speaker_boost: true,
+          speed:             1.2
+        }
       }.to_json
     end
 
