@@ -210,10 +210,25 @@ class AiAgent::PromptBuilder
                            .last(@agent.memory_window_messages)
 
     history.filter_map do |msg|
-      next if msg.content.blank?
+      content = extract_message_content_for_history(msg)
+      next if content.blank?
 
       role = msg.message_type == 'incoming' ? 'user' : 'assistant'
-      { role: role, content: msg.content.to_s }
+      { role: role, content: content }
+    end
+  end
+
+  def extract_message_content_for_history(message)
+    base       = message.content.to_s.strip
+    audio_text = message.attachments
+                        .where(file_type: :audio)
+                        .filter_map { |att| att.meta&.dig('transcribed_text') }
+                        .join(' ')
+
+    if audio_text.present?
+      base.present? ? "#{base}\n\n[Áudio]: #{audio_text}" : "[Áudio]: #{audio_text}"
+    else
+      base
     end
   end
 

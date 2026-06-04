@@ -50,6 +50,24 @@ class AiAgent::IncomingMessageProcessor
   end
 
   def message_content
-    @message_content ||= @message.content.to_s.strip
+    @message_content ||= extract_message_content(@message)
+  end
+
+  def extract_message_content(message)
+    base       = message.content.to_s.strip
+    audio_text = extract_audio_transcription(message)
+
+    if audio_text.present?
+      base.present? ? "#{base}\n\n[Áudio]: #{audio_text}" : "[Áudio]: #{audio_text}"
+    else
+      base
+    end
+  end
+
+  def extract_audio_transcription(message)
+    message.attachments
+           .where(file_type: :audio)
+           .filter_map { |att| att.meta&.dig('transcribed_text') }
+           .join(' ')
   end
 end
