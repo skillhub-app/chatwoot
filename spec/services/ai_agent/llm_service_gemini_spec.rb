@@ -7,8 +7,9 @@ RSpec.describe AiAgent::LlmService do
     instance_double(
       'AiAgent',
       llm_provider:          'gemini',
-      llm_model:             'gemini-2.0-flash',
-      llm_api_key_encrypted: 'test-key'
+      llm_model:             'gemini-2.5-flash',
+      llm_api_key_encrypted: 'test-key',
+      effective_api_key:     'test-key'
     )
   end
 
@@ -16,11 +17,11 @@ RSpec.describe AiAgent::LlmService do
     { system: 'You are helpful.', messages: [{ role: 'user', content: 'Hello' }] }
   end
 
-  def gemini_url(model = 'gemini-2.0-flash')
+  def gemini_url(model = 'gemini-2.5-flash')
     "#{GEMINI_BASE}/#{model}:generateContent?key=test-key"
   end
 
-  def stub_gemini(body, model: 'gemini-2.0-flash', status: 200)
+  def stub_gemini(body, model: 'gemini-2.5-flash', status: 200)
     stub_request(:post, gemini_url(model))
       .to_return(status: status, body: body.to_json, headers: { 'Content-Type' => 'application/json' })
   end
@@ -139,7 +140,7 @@ RSpec.describe AiAgent::LlmService do
     end
 
     it 'captures thoughtSignature in raw_parts' do
-      stub_gemini(response_body, model: 'gemini-2.0-flash')
+      stub_gemini(response_body, model: 'gemini-2.5-flash')
 
       result = described_class.call(agent, base_prompt)
 
@@ -147,7 +148,7 @@ RSpec.describe AiAgent::LlmService do
     end
 
     it 'uses the real id alongside thoughtSignature' do
-      stub_gemini(response_body, model: 'gemini-2.0-flash')
+      stub_gemini(response_body, model: 'gemini-2.5-flash')
 
       result = described_class.call(agent, base_prompt)
 
@@ -344,11 +345,11 @@ RSpec.describe AiAgent::LlmService do
 
       described_class.call(agent, { system: 'sys', messages: messages })
 
-      expect(WebMock).to have_requested(:post, gemini_url).with do |req|
+      expect(WebMock).to(have_requested(:post, gemini_url).with { |req|
         body  = JSON.parse(req.body)
         model = body['contents'].find { |c| c['role'] == 'model' }
         model&.dig('parts', 0, 'thoughtSignature') == 'SIG'
-      end
+      })
     end
   end
 end

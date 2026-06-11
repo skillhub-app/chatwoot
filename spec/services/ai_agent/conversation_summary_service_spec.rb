@@ -116,7 +116,7 @@ RSpec.describe AiAgent::ConversationSummaryService do
       let(:gemini_agent) do
         AiAgent.create!(
           account: account, name: 'Gemini Bot', language: 'pt', active: true,
-          llm_provider: 'gemini', llm_model: 'gemini-2.0-flash',
+          llm_provider: 'gemini', llm_model: 'gemini-2.5-flash',
           llm_api_key_encrypted: 'gemini-key'
         )
       end
@@ -136,7 +136,7 @@ RSpec.describe AiAgent::ConversationSummaryService do
       let(:anthropic_agent) do
         AiAgent.create!(
           account: account, name: 'Claude Bot', language: 'pt', active: true,
-          llm_provider: 'anthropic', llm_model: 'claude-3-haiku-20240307',
+          llm_provider: 'anthropic', llm_model: 'claude-haiku-4-5',
           llm_api_key_encrypted: 'anthropic-key'
         )
       end

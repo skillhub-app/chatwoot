@@ -30,21 +30,29 @@ const TIMEZONES = [
 
 const LLM_MODELS_BY_PROVIDER = {
   openai: [
+    { value: 'gpt-5.5', label: 'GPT-5.5' },
+    { value: 'gpt-5.4', label: 'GPT-5.4' },
+    { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
+    { value: 'gpt-5.4-nano', label: 'GPT-5.4 Nano' },
+    { value: 'gpt-5.1', label: 'GPT-5.1' },
+    { value: 'gpt-4.1', label: 'GPT-4.1' },
+    { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini' },
     { value: 'gpt-4o', label: 'GPT-4o' },
     { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
   ],
   anthropic: [
-    { value: 'claude-opus-4-7', label: 'Claude Opus 4' },
-    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4' },
-    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+    { value: 'claude-opus-4-8', label: 'Claude Opus 4.8' },
+    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+    { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
   ],
   gemini: [
-    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-    { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite' },
-    { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
-    { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
-    { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (Preview)' },
+    { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+    { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' },
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
+    { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', preview: true },
+    { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', preview: true },
   ],
 };
 

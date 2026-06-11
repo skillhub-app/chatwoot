@@ -1,8 +1,9 @@
 class AiAgent < ApplicationRecord
   ALLOWED_MODELS_BY_PROVIDER = {
-    'openai' => %w[gpt-4o gpt-4o-mini gpt-4-turbo],
-    'anthropic' => %w[claude-opus-4-7 claude-sonnet-4-6 claude-haiku-4-5-20251001],
-    'gemini' => %w[gemini-2.0-flash gemini-2.0-flash-lite gemini-1.5-pro gemini-1.5-flash gemini-3-flash-preview],
+    'openai' => %w[gpt-5.5 gpt-5.4 gpt-5.4-mini gpt-5.4-nano gpt-5.1 gpt-4.1 gpt-4.1-mini gpt-4o gpt-4o-mini],
+    'anthropic' => %w[claude-opus-4-8 claude-sonnet-4-6 claude-haiku-4-5],
+    'gemini' => %w[gemini-3.5-flash gemini-3.1-flash-lite gemini-2.5-pro gemini-2.5-flash gemini-2.5-flash-lite
+                   gemini-3.1-pro-preview gemini-3-flash-preview],
   }.freeze
 
   belongs_to :account

@@ -27,8 +27,8 @@ RSpec.describe AiAgent do
       expect(agent).to be_valid
     end
 
-    it 'aceita claude-opus-4-7 com provider anthropic' do
-      agent = build_agent(provider: 'anthropic', model: 'claude-opus-4-7')
+    it 'aceita claude-opus-4-8 com provider anthropic' do
+      agent = build_agent(provider: 'anthropic', model: 'claude-opus-4-8')
       expect(agent).to be_valid
     end
 
@@ -62,6 +62,19 @@ RSpec.describe AiAgent do
       agent = build_agent(provider: '', model: 'gpt-4o')
       agent.valid?
       expect(agent.errors[:llm_provider]).to be_empty
+    end
+  end
+
+  context 'effective_api_key' do
+    it 'prefere a api_key da credential centralizada' do
+      credential = create(:llm_provider_credential, account: account, provider: 'openai', api_key: 'central-key')
+      agent = create(:ai_agent, account: account, llm_credential: credential, llm_api_key_encrypted: 'legacy-key')
+      expect(agent.effective_api_key).to eq('central-key')
+    end
+
+    it 'faz fallback pro campo legado quando sem credential' do
+      agent = create(:ai_agent, account: account, llm_api_key_encrypted: 'legacy-key')
+      expect(agent.effective_api_key).to eq('legacy-key')
     end
   end
 end
