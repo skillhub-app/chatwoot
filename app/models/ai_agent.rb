@@ -7,6 +7,7 @@ class AiAgent < ApplicationRecord
 
   belongs_to :account
   belongs_to :inbox, optional: true
+  belongs_to :llm_credential, class_name: 'LlmProviderCredential', optional: true
 
   has_many :ai_agent_prompt_versions, dependent: :destroy
   has_many :ai_agent_protocols,       dependent: :destroy
@@ -42,6 +43,13 @@ class AiAgent < ApplicationRecord
 
   def has_draft?
     prompt_draft.present? && prompt_draft.any?
+  end
+
+  # Key efetiva: credential centralizada com fallback pro campo legado
+  def effective_api_key
+    return llm_credential.api_key if llm_credential.present?
+
+    llm_api_key_encrypted
   end
 
   private
