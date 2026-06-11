@@ -3,7 +3,9 @@
 import { ref, watch, computed } from 'vue';
 import { useStore } from 'vuex';
 import aiAgentsAPI from '../../api/aiAgents';
+import llmProviderCredentialsAPI from '../../api/llmProviderCredentials';
 import AiAgentProtocols from './AiAgentProtocols.vue';
+import LlmProvidersConfigModal from './LlmProvidersConfigModal.vue';
 
 const props = defineProps({ agent: { type: Object, required: true } });
 const emit = defineEmits(['updated']);
@@ -46,6 +48,12 @@ const LLM_MODELS_BY_PROVIDER = {
   ],
 };
 
+const PROVIDER_LABELS = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  gemini: 'Google Gemini',
+};
+
 const inboxes = ref(store.getters['inboxes/getInboxes'] || []);
 
 const form = ref({
@@ -58,7 +66,6 @@ const form = ref({
   message_buffer_seconds: props.agent.message_buffer_seconds,
   llm_provider: props.agent.llm_provider || 'openai',
   llm_model: props.agent.llm_model || 'gpt-4o',
-  llm_api_key_encrypted: '',
   tts_enabled: props.agent.tts_enabled,
   tts_voice_id: props.agent.tts_voice_id || '',
   tts_api_key_encrypted: '',
@@ -80,7 +87,6 @@ watch(
       message_buffer_seconds: a.message_buffer_seconds,
       llm_provider: a.llm_provider || 'openai',
       llm_model: a.llm_model || 'gpt-4o',
-      llm_api_key_encrypted: '',
       tts_enabled: a.tts_enabled,
       tts_voice_id: a.tts_voice_id || '',
       tts_api_key_encrypted: '',
@@ -95,13 +101,41 @@ const llmModels = computed(
   () => LLM_MODELS_BY_PROVIDER[form.value.llm_provider] || LLM_MODELS_BY_PROVIDER.openai
 );
 
+const providerLabel = computed(
+  () => PROVIDER_LABELS[form.value.llm_provider] || form.value.llm_provider
+);
+
+const configuredProviders = ref([]);
+const showLlmProvidersModal = ref(false);
+
+const hasCredentialForProvider = computed(() =>
+  configuredProviders.value.includes(form.value.llm_provider)
+);
+
+async function loadConfiguredProviders() {
+  try {
+    const { data } = await llmProviderCredentialsAPI.getAll();
+    configuredProviders.value = (data.payload || [])
+      .filter(c => c.has_api_key)
+      .map(c => c.provider);
+  } catch {
+    configuredProviders.value = [];
+  }
+}
+
+loadConfiguredProviders();
+
+function closeLlmProvidersModal() {
+  showLlmProvidersModal.value = false;
+  loadConfiguredProviders();
+}
+
 async function save() {
   saving.value = true;
   error.value = null;
   saved.value = false;
   try {
     const payload = { ...form.value };
-    if (!payload.llm_api_key_encrypted) delete payload.llm_api_key_encrypted;
     if (!payload.tts_api_key_encrypted) delete payload.tts_api_key_encrypted;
     const res = await aiAgentsAPI.update(props.agent.id, payload);
     emit('updated', res.data.payload);
@@ -258,23 +292,30 @@ const labelClass =
           <label :class="labelClass">Modelo</label>
           <select v-model="form.llm_model" :class="inputClass">
             <option v-for="m in llmModels" :key="m.value" :value="m.value">
-              {{ m.label }}
+              {{ m.label }}{{ m.preview ? ' [Preview]' : '' }}
             </option>
           </select>
         </div>
       </div>
-      <div>
-        <label :class="labelClass"
-          >API Key (deixe em branco para manter a atual)</label
-        >
-        <input
-          v-model="form.llm_api_key_encrypted"
-          type="password"
-          placeholder="sk-..."
-          :class="inputClass"
-          autocomplete="off"
-        />
+      <div
+        v-if="!hasCredentialForProvider"
+        class="flex items-start gap-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2"
+      >
+        <span class="i-lucide-alert-triangle size-4 text-amber-500 mt-0.5" />
+        <p class="text-xs text-amber-700 dark:text-amber-300">
+          Você selecionou {{ providerLabel }} mas não há API key configurada
+          para este provider.
+          <a
+            class="underline cursor-pointer font-medium"
+            @click="showLlmProvidersModal = true"
+            >Configurar agora</a
+          >
+        </p>
       </div>
+      <p v-else class="text-[11px] text-slate-400">
+        As chaves de API são gerenciadas em Configurações → Integrações → LLM
+        Providers.
+      </p>
     </div>
 
     <!-- Comportamento -->
@@ -424,5 +465,10 @@ const labelClass =
         </div>
       </template>
     </div>
+
+    <LlmProvidersConfigModal
+      :show="showLlmProvidersModal"
+      @close="closeLlmProvidersModal"
+    />
   </div>
 </template>
