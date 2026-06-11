@@ -59,7 +59,7 @@ class AiAgent::LlmService
   private
 
   def api_key
-    @agent.llm_api_key_encrypted.presence || raise(ArgumentError, 'LLM API key not configured')
+    @agent.effective_api_key.presence || raise(ArgumentError, 'LLM API key not configured')
   end
 
   def has_tools?
