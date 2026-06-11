@@ -107,6 +107,7 @@ Rails.application.routes.draw do
               post :reauthorize_page
             end
           end
+          resources :llm_provider_credentials, only: [:index, :create, :update, :destroy]
           resources :ai_agents, only: [:index, :show, :create, :update, :destroy] do
             collection { post :import }
             member do
