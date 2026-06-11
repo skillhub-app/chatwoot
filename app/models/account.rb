@@ -62,6 +62,7 @@ class Account < ApplicationRecord
   has_many :assignment_policies, dependent: :destroy_async
   has_many :automation_rules, dependent: :destroy_async
   has_many :ai_agents, dependent: :destroy
+  has_many :llm_provider_credentials, dependent: :destroy
   has_many :ai_agent_conversations, dependent: :destroy
   has_many :ai_agent_executions, dependent: :destroy
   has_many :kanban_pipelines, dependent: :destroy
