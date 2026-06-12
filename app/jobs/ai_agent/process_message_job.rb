@@ -26,9 +26,10 @@ class AiAgent::ProcessMessageJob < ApplicationJob
   private
 
   def run(agent, conversation, new_messages, started_at)
+    # reorder: Message tem default_scope order(created_at: :asc) que anula .order encadeado
     last_was_audio = conversation.messages
                                  .where(message_type: :incoming)
-                                 .order(created_at: :desc)
+                                 .reorder(created_at: :desc)
                                  .first
                                  &.attachments
                                  &.where(file_type: :audio)
