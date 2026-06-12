@@ -42,7 +42,8 @@ RSpec.describe AiAgent::ProcessMessageJob do
         expect(AiAgent::MessageHumanizer).to receive(:send_response).with(
           conversation,
           AiAgent::PromptInjectionFilter::BLOCKED_RESPONSE,
-          agent: agent
+          agent: agent,
+          last_was_audio: false
         )
         described_class.new.perform(agent.id, conversation.id)
       end
