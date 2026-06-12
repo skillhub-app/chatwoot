@@ -2,7 +2,7 @@ class AiAgent::Tool < ApplicationRecord
   HTTP_METHODS = %w[GET POST PUT PATCH DELETE].freeze
 
   belongs_to :ai_agent
-  has_many :tool_executions, class_name: 'AiAgent::ToolExecution', dependent: :destroy
+  has_many :tool_executions, class_name: 'AiAgent::ToolExecution', foreign_key: :ai_agent_tool_id, dependent: :destroy
 
   validates :name,         presence: true, length: { maximum: 64 },
                            format: { with: /\A[a-z][a-z0-9_]*\z/, message: 'must be snake_case (lowercase letters, digits, underscores, starting with a letter)' }
