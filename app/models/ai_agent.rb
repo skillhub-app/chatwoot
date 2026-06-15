@@ -46,10 +46,15 @@ class AiAgent < ApplicationRecord
     prompt_draft.present? && prompt_draft.any?
   end
 
-  # Key efetiva: credential centralizada com fallback pro campo legado
   def effective_api_key
-    return llm_credential.api_key if llm_credential.present?
+    # 1. FK explícita + provider compatível
+    return llm_credential.api_key if llm_credential.present? && llm_credential.provider == llm_provider
 
+    # 2. Auto-wiring: busca credential por account + provider atual
+    cred = account.llm_provider_credentials.find_by(provider: llm_provider)
+    return cred.api_key if cred.present?
+
+    # 3. Fallback legado
     llm_api_key_encrypted
   end
 

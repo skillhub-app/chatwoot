@@ -66,15 +66,37 @@ RSpec.describe AiAgent do
   end
 
   context 'effective_api_key' do
-    it 'prefere a api_key da credential centralizada' do
-      credential = create(:llm_provider_credential, account: account, provider: 'openai', api_key: 'central-key')
-      agent = create(:ai_agent, account: account, llm_credential: credential, llm_api_key_encrypted: 'legacy-key')
+    it 'usa credential quando provider bate' do
+      cred  = create(:llm_provider_credential, account: account, provider: 'openai', api_key: 'central-key')
+      agent = create(:ai_agent, account: account, llm_provider: 'openai', llm_model: 'gpt-4o',
+                                llm_credential: cred, llm_api_key_encrypted: 'legacy-key')
       expect(agent.effective_api_key).to eq('central-key')
     end
 
-    it 'faz fallback pro campo legado quando sem credential' do
-      agent = create(:ai_agent, account: account, llm_api_key_encrypted: 'legacy-key')
+    it 'ignora credential cruzada (provider diferente) e faz auto-wiring por account+provider' do
+      openai_cred  = create(:llm_provider_credential, account: account, provider: 'openai', api_key: 'openai-key')
+      gemini_cred  = create(:llm_provider_credential, account: account, provider: 'gemini', api_key: 'gemini-key')
+      agent = create(:ai_agent, account: account, llm_provider: 'gemini', llm_model: 'gemini-2.5-flash',
+                                llm_credential: openai_cred)
+      expect(agent.effective_api_key).to eq('gemini-key')
+    end
+
+    it 'sem llm_credential FK: busca por account+provider' do
+      create(:llm_provider_credential, account: account, provider: 'anthropic', api_key: 'anth-key')
+      agent = create(:ai_agent, account: account, llm_provider: 'anthropic', llm_model: 'claude-sonnet-4-6')
+      expect(agent.effective_api_key).to eq('anth-key')
+    end
+
+    it 'sem credential alguma: fallback llm_api_key_encrypted' do
+      agent = create(:ai_agent, account: account, llm_provider: 'openai', llm_model: 'gpt-4o',
+                                llm_api_key_encrypted: 'legacy-key')
       expect(agent.effective_api_key).to eq('legacy-key')
+    end
+
+    it 'sem nada: retorna nil' do
+      agent = create(:ai_agent, account: account, llm_provider: 'openai', llm_model: 'gpt-4o',
+                                llm_api_key_encrypted: nil)
+      expect(agent.effective_api_key).to be_nil
     end
   end
 end
