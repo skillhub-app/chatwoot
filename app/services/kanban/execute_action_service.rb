@@ -233,8 +233,15 @@ class Kanban::ExecuteActionService
     conversation = find_conversation_for_message
     messages_history = build_followup_history(conversation)
 
-    rascunho = @config['ai_prompt'].to_s.strip
-    intention_block = rascunho.present? ? "INTENÇÃO DO OPERADOR:\n#{rascunho}\n\n" : ''
+    parser = AiAgent::FollowUpPromptParser.new(
+      @config['ai_prompt'].to_s,
+      contact:       conversation&.contact,
+      conversation:  conversation,
+      stage:         @item.stage,
+      mode_override: @config['ai_mode_override']
+    )
+    ai_prompt = parser.call
+    intention_block = ai_prompt.present? ? "#{ai_prompt}\n\n" : ''
 
     system_prompt = <<~PROMPT.strip
       Você é #{agent.name}, atendente#{agent.company.present? ? " do escritório #{agent.company}" : ''}.
