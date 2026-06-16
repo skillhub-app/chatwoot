@@ -68,6 +68,23 @@ const hasTasks = computed(
 );
 const hasAttachments = computed(() => props.item.attachments_count > 0);
 
+const timeInStage = computed(() => {
+  if (!props.item.stage_entered_at) return null;
+  const ms = Date.now() - props.item.stage_entered_at * 1000;
+  if (ms < 0) return null;
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return '0m';
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  return `${Math.floor(hr / 24)}d`;
+});
+
+const timeInStageTooltip = computed(() => {
+  if (!props.item.stage_entered_at) return '';
+  return `Entrou nesta etapa em ${new Date(props.item.stage_entered_at * 1000).toLocaleString('pt-BR')}`;
+});
+
 const store = useStore();
 const allLabels = computed(() => store.getters['labels/getLabels'] || []);
 const conversationLabels = computed(() => {
@@ -81,10 +98,18 @@ const conversationLabels = computed(() => {
 
 <template>
   <div
-    class="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 select-none hover:shadow-md transition-shadow duration-150 group/card cursor-grab active:cursor-grabbing"
+    class="relative bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 select-none hover:shadow-md transition-shadow duration-150 group/card cursor-grab active:cursor-grabbing"
     :style="{ borderLeftColor: stageColor, borderLeftWidth: '3px' }"
     @click="emit('click', item)"
   >
+    <!-- Time-in-stage badge -->
+    <span
+      v-if="timeInStage"
+      :title="timeInStageTooltip"
+      class="absolute top-2 right-2 text-[11px] font-mono opacity-60 bg-white/5 dark:bg-black/10 px-1.5 py-0.5 rounded pointer-events-none"
+      >{{ timeInStage }}</span
+    >
+
     <!-- Card content -->
     <div class="flex items-start px-2 pt-2.5 pb-0">
       <div class="flex-1 min-w-0 pb-2.5">
