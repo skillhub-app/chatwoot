@@ -226,7 +226,13 @@ class AiAgent::PromptBuilder
                         .join(' ')
 
     if audio_text.present?
-      base.present? ? "#{base}\n\n[Áudio]: #{audio_text}" : "[Áudio]: #{audio_text}"
+      if message.message_type == 'incoming'
+        base.present? ? "#{base}\n\n[Áudio]: #{audio_text}" : "[Áudio]: #{audio_text}"
+      else
+        # AI TTS outgoing: drop the [Áudio]: prefix and strip inherited "Áudio. Áudio. " artifacts
+        clean = audio_text.gsub(/\A(\s*[Áá]udio[.\s]*)+/i, '').strip
+        clean.presence || audio_text
+      end
     else
       base
     end
