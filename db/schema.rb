@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_06_10_000003) do
+ActiveRecord::Schema[7.1].define(version: 2026_06_16_120000) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -178,7 +178,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_10_000003) do
     t.datetime "updated_at", null: false
     t.index ["ai_agent_id", "created_at"], name: "index_ai_agent_executions_on_ai_agent_id_and_created_at"
     t.index ["ai_agent_id"], name: "index_ai_agent_executions_on_ai_agent_id"
-    t.index ["conversation_id", "created_at"], name: "index_ai_agent_executions_on_conv_created_at"
     t.index ["conversation_id"], name: "index_ai_agent_executions_on_conversation_id"
     t.index ["status"], name: "index_ai_agent_executions_on_status"
   end
@@ -219,7 +218,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_10_000003) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.string "action", default: "pause_for_human", null: false
-    t.index ["action"], name: "index_ai_agent_protocols_on_action"
     t.index ["ai_agent_id"], name: "index_ai_agent_protocols_on_ai_agent_id"
   end
 
@@ -305,13 +303,12 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_10_000003) do
     t.string "reactivation_command", default: "/ia"
     t.integer "message_chunk_size", default: 300, null: false
     t.jsonb "summary_config", default: {}, null: false
-    t.integer "memory_window_messages", default: 100, null: false
     t.bigint "llm_credential_id"
+    t.integer "memory_window_messages", default: 100, null: false
     t.index ["account_id", "active"], name: "index_ai_agents_on_account_id_and_active"
     t.index ["account_id", "inbox_id"], name: "index_ai_agents_on_account_id_and_inbox_id", unique: true
     t.index ["account_id"], name: "index_ai_agents_on_account_id"
     t.index ["inbox_id"], name: "index_ai_agents_on_inbox_id"
-    t.index ["llm_credential_id"], name: "index_ai_agents_on_llm_credential_id"
   end
 
   create_table "applied_slas", force: :cascade do |t|
@@ -1144,6 +1141,30 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_10_000003) do
     t.index ["uploaded_by_id"], name: "index_kanban_attachments_on_uploaded_by_id"
   end
 
+  create_table "kanban_automation_actions", force: :cascade do |t|
+    t.bigint "kanban_automation_id", null: false
+    t.string "action_type", null: false
+    t.integer "position", default: 0, null: false
+    t.integer "delay_minutes", default: 0, null: false
+    t.string "delay_type", default: "minutes", null: false
+    t.boolean "active", default: true, null: false
+    t.jsonb "config", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "kanban_automation_executions", force: :cascade do |t|
+    t.bigint "kanban_item_id", null: false
+    t.bigint "kanban_automation_action_id", null: false
+    t.string "status", default: "pending", null: false
+    t.datetime "scheduled_at", precision: nil
+    t.datetime "executed_at", precision: nil
+    t.text "error_message"
+    t.jsonb "result", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
   create_table "kanban_automations", force: :cascade do |t|
     t.bigint "pipeline_id", null: false
     t.string "name", null: false
@@ -1198,6 +1219,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_10_000003) do
     t.jsonb "tags", default: [], null: false
     t.bigint "contact_id"
     t.bigint "lost_reason_id"
+    t.datetime "stage_entered_at"
     t.index ["account_id", "pipeline_id"], name: "index_kanban_items_on_account_id_and_pipeline_id"
     t.index ["account_id"], name: "index_kanban_items_on_account_id"
     t.index ["assignee_id"], name: "index_kanban_items_on_assignee_id"
@@ -1207,6 +1229,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_10_000003) do
     t.index ["pipeline_id"], name: "index_kanban_items_on_pipeline_id"
     t.index ["source"], name: "index_kanban_items_on_source"
     t.index ["stage_id", "position"], name: "index_kanban_items_on_stage_id_and_position"
+    t.index ["stage_id", "stage_entered_at"], name: "index_kanban_items_on_stage_id_and_stage_entered_at"
     t.index ["stage_id"], name: "index_kanban_items_on_stage_id"
     t.index ["temperature"], name: "index_kanban_items_on_temperature"
   end
@@ -1329,11 +1352,10 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_10_000003) do
   create_table "llm_provider_credentials", force: :cascade do |t|
     t.bigint "account_id", null: false
     t.string "provider", null: false
-    t.text "api_key", null: false
+    t.string "api_key", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["account_id", "provider"], name: "index_llm_provider_credentials_on_account_id_and_provider", unique: true
-    t.index ["account_id"], name: "index_llm_provider_credentials_on_account_id"
   end
 
   create_table "macros", force: :cascade do |t|
@@ -1705,9 +1727,12 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_10_000003) do
   add_foreign_key "ai_agent_tools", "ai_agents", on_delete: :cascade
   add_foreign_key "ai_agents", "accounts"
   add_foreign_key "ai_agents", "inboxes"
-  add_foreign_key "ai_agents", "llm_provider_credentials", column: "llm_credential_id", on_delete: :nullify
+  add_foreign_key "ai_agents", "llm_provider_credentials", column: "llm_credential_id", name: "ai_agents_llm_credential_id_fkey", on_delete: :nullify
   add_foreign_key "inboxes", "portals"
-  add_foreign_key "llm_provider_credentials", "accounts"
+  add_foreign_key "kanban_automation_actions", "kanban_automations", name: "fk_kanban_automation_actions_automation"
+  add_foreign_key "kanban_automation_executions", "kanban_automation_actions", name: "fk_kae_action"
+  add_foreign_key "kanban_automation_executions", "kanban_items", name: "fk_kae_item"
+  add_foreign_key "llm_provider_credentials", "accounts", name: "llm_provider_credentials_account_id_fkey"
   create_trigger("accounts_after_insert_row_tr", :generated => true, :compatibility => 1).
       on("accounts").
       after(:insert).
