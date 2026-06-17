@@ -1,4 +1,7 @@
 Rails.application.routes.draw do
+  # Google Calendar OAuth callback — must be BEFORE Devise mount to prevent /auth/* hijack
+  get '/google_calendar/callback', to: 'google_calendar_callbacks#callback'
+
   # AUTH STARTS
   mount_devise_token_auth_for 'User', at: 'auth', controllers: {
     confirmations: 'devise_overrides/confirmations',
