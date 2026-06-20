@@ -67,7 +67,9 @@ RSpec.describe AiAgent::GoogleCalendar::EventCancelerService do
   end
 
   it 'retorna erro legível (graceful) quando a API falha' do
-    stub_request(:get, list_url).to_return(status: 500, body: 'down')
+    stub_request(:get, list_url)
+      .with(query: hash_including('privateExtendedProperty' => "lead_phone=#{lead_phone}"))
+      .to_return(status: 500, body: 'down')
     result = described_class.new(schedule, lead_phone: lead_phone).call
     expect(result[:status]).to eq('error')
     expect(result[:erro]).to be_present
