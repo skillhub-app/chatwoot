@@ -31,6 +31,24 @@ class AiAgent::GoogleCalendar::ApiClient
     get('users/me/calendarList', { maxResults: max_results })
   end
 
+  # Lista eventos filtrados por extendedProperties.private.<key> = <value>, via o
+  # parâmetro privateExtendedProperty da API do Google (filtro server-side). Usado
+  # pra achar APENAS eventos criados pela IA pra um lead específico — nunca varre
+  # a agenda inteira nem expõe eventos de terceiros.
+  def list_events_by_private_property(calendar_id, key, value, time_min: nil)
+    get("calendars/#{CGI.escape(calendar_id)}/events", {
+          privateExtendedProperty: "#{key}=#{value}",
+          singleEvents:            true,
+          orderBy:                 'startTime',
+          maxResults:              250,
+          timeMin:                 time_min&.iso8601
+        }.compact)
+  end
+
+  def delete_event(calendar_id, event_id)
+    delete("calendars/#{CGI.escape(calendar_id)}/events/#{CGI.escape(event_id)}")
+  end
+
   private
 
   def ensure_valid_token!
@@ -72,6 +90,16 @@ class AiAgent::GoogleCalendar::ApiClient
       req.headers['Authorization'] = "Bearer #{access_token}"
       req.body = body
     end
+    raise "Google Calendar API error: #{response.body}" unless response.success?
+
+    response.body
+  end
+
+  def delete(path)
+    response = conn.delete(path) do |req|
+      req.headers['Authorization'] = "Bearer #{access_token}"
+    end
+    # DELETE de evento no Google retorna 204 No Content (sem body) em sucesso.
     raise "Google Calendar API error: #{response.body}" unless response.success?
 
     response.body

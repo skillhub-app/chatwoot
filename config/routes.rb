@@ -145,6 +145,11 @@ Rails.application.routes.draw do
             member { get :metrics, to: 'ai_agent_metrics#agent_stats' }
           end
           get 'ai_agent_metrics', to: 'ai_agent_metrics#index'
+          # Endpoints internos das tools nativas de calendário (chamados pelo
+          # ToolExecutor via X-Internal-Token; ai_agent_id vai na query string).
+          post 'ai_agent_calendar/consultar_horarios_livres', to: 'ai_agent_calendar#consultar_horarios_livres'
+          post 'ai_agent_calendar/criar_agendamento',         to: 'ai_agent_calendar#criar_agendamento'
+          post 'ai_agent_calendar/cancelar_agendamento',      to: 'ai_agent_calendar#cancelar_agendamento'
           namespace :kanban do
             get 'items', to: 'global_items#index'
             resources :items, only: [] do

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_06_16_120000) do
+ActiveRecord::Schema[7.1].define(version: 2026_06_20_000001) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -274,10 +274,13 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_16_120000) do
     t.integer "position", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.boolean "is_native", default: false, null: false
+    t.string "native_key"
     t.index ["ai_agent_id", "active"], name: "index_ai_agent_tools_on_ai_agent_id_and_active"
     t.index ["ai_agent_id", "name"], name: "index_ai_agent_tools_on_ai_agent_id_and_name", unique: true
     t.index ["ai_agent_id", "position"], name: "index_ai_agent_tools_on_ai_agent_id_and_position"
     t.index ["ai_agent_id"], name: "index_ai_agent_tools_on_ai_agent_id"
+    t.index ["native_key"], name: "index_ai_agent_tools_on_native_key"
   end
 
   create_table "ai_agents", force: :cascade do |t|

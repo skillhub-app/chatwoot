@@ -39,6 +39,10 @@ class GoogleCalendarCallbacksController < ApplicationController
     # Auto-seleciona a primary calendar (graceful: nunca bloqueia a conexão).
     AiAgent::GoogleCalendar::PrimaryCalendarSelectorService.new(schedule).call
 
+    # Se a agenda ficou conectada de verdade, cadastra as tools nativas de
+    # calendário no agente (graceful: nunca bloqueia a conexão).
+    activate_native_tools(schedule)
+
     Rails.logger.info "[GoogleCalendar] Connected agent_id=#{agent_id} account_id=#{account_id}"
     redirect_to success_url(account_id, agent_id), allow_other_host: true
   rescue StandardError => e
@@ -48,6 +52,14 @@ class GoogleCalendarCallbacksController < ApplicationController
   end
 
   private
+
+  def activate_native_tools(schedule)
+    return unless schedule.google_connected?
+
+    AiAgent::NativeToolRegistry.activate(schedule.ai_agent, 'google_calendar')
+  rescue StandardError => e
+    Rails.logger.error "[GoogleCalendar] Native tools activation failed: #{e.class}: #{e.message}"
+  end
 
   def frontend_url
     ENV.fetch('FRONTEND_URL', 'http://localhost:3000')

@@ -82,7 +82,15 @@ class AiAgent::ToolExecutor
 
   def apply_headers(req)
     req.headers['Content-Type'] = 'application/json'
-    (@tool.headers || {}).each { |k, v| req.headers[k] = v.to_s }
+    (@tool.headers || {}).each { |k, v| req.headers[k] = resolve_env(v.to_s) }
+  end
+
+  # Valores no formato EXATO "${NOME}" são resolvidos da ENV em runtime. Permite
+  # guardar uma referência a segredo no header da tool (banco) sem o valor real.
+  # Qualquer outro valor passa inalterado.
+  def resolve_env(value)
+    match = value.match(/\A\$\{(\w+)\}\z/)
+    match ? ENV.fetch(match[1], '') : value
   end
 
   def format_output(output)

@@ -94,6 +94,8 @@ class Api::V1::Accounts::AiAgentToolsController < Api::V1::Accounts::BaseControl
       timeout_seconds:       t.timeout_seconds,
       active:                t.active,
       position:              t.position,
+      is_native:             t.is_native,
+      native_key:            t.native_key,
       created_at:            t.created_at.to_i,
       updated_at:            t.updated_at.to_i
     }

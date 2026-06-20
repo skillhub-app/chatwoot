@@ -75,6 +75,30 @@ RSpec.describe AiAgent::GoogleCalendar::ApiClient do
     end
   end
 
+  describe '#list_events_by_private_property' do
+    it 'filtra por privateExtendedProperty e bate na URL com prefixo' do
+      stub = stub_request(:get, "#{base}/calendars/#{escaped_id}/events")
+             .with(query: hash_including('privateExtendedProperty' => 'lead_phone=+5519999990000',
+                                         'singleEvents' => 'true'))
+             .to_return(status: 200, body: { 'items' => [] }.to_json,
+                        headers: { 'Content-Type' => 'application/json' })
+
+      client.list_events_by_private_property(calendar_id, 'lead_phone', '+5519999990000', time_min: time_min)
+
+      expect(stub).to have_been_requested
+    end
+  end
+
+  describe '#delete_event' do
+    it 'faz DELETE em /calendar/v3/calendars/<id>/events/<event_id> (com prefixo)' do
+      stub = stub_request(:delete, "#{base}/calendars/#{escaped_id}/events/evt_1").to_return(status: 204, body: '')
+
+      client.delete_event(calendar_id, 'evt_1')
+
+      expect(stub).to have_been_requested
+    end
+  end
+
   describe 'path sem "/" inicial (regressão do bug)' do
     it 'NUNCA bate na raiz do host sem o prefixo /calendar/v3' do
       stub_request(:get, "#{base}/users/me/calendarList")

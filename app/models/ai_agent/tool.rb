@@ -16,6 +16,9 @@ class AiAgent::Tool < ApplicationRecord
   scope :active,   -> { where(active: true) }
   scope :inactive, -> { where(active: false) }
   scope :ordered,  -> { order(:position, :name) }
+  # Tools nativas (is_native: true) são cadastradas pelo AiAgent::NativeToolRegistry,
+  # apontam pra endpoints internos do Chatwoot e têm URL/schema imutáveis pela UI.
+  scope :native,   -> { where(is_native: true) }
 
   def to_function_definition
     {

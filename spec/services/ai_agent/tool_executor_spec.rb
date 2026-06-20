@@ -226,4 +226,47 @@ RSpec.describe AiAgent::ToolExecutor do
       end
     end
   end
+
+  describe '#resolve_env (private) — interpolação de header via ENV' do
+    let(:executor) { described_class.new(build_tool, {}) }
+
+    it 'resolve "${NOME}" para o valor da ENV' do
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('INTERNAL_API_TOKEN', '').and_return('secret-xyz')
+      expect(executor.send(:resolve_env, '${INTERNAL_API_TOKEN}')).to eq('secret-xyz')
+    end
+
+    it 'deixa valores normais inalterados' do
+      expect(executor.send(:resolve_env, 'Bearer abc123')).to eq('Bearer abc123')
+    end
+
+    it 'só interpola no formato EXATO ${...} (não no meio da string)' do
+      expect(executor.send(:resolve_env, 'pre-${X}-pos')).to eq('pre-${X}-pos')
+    end
+  end
+
+  describe 'header interpolado de fato enviado na requisição' do
+    let(:tool) do
+      instance_double(
+        AiAgent::Tool,
+        name: 'native_tool', ai_agent: ai_agent, http_method: 'POST',
+        endpoint_url: 'https://internal.test/endpoint',
+        headers: { 'X-Internal-Token' => '${INTERNAL_API_TOKEN}' },
+        request_body_template: nil, response_template: nil, timeout_seconds: 5
+      )
+    end
+
+    it 'envia o token resolvido da ENV, não o literal "${...}"' do
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('INTERNAL_API_TOKEN', '').and_return('secret-xyz')
+      allow(AiAgent::ToolExecution).to receive(:create!)
+      stub = stub_request(:post, 'https://internal.test/endpoint')
+             .with(headers: { 'X-Internal-Token' => 'secret-xyz' })
+             .to_return(status: 200, body: '{}', headers: { 'Content-Type' => 'application/json' })
+
+      described_class.new(tool, {}).call
+
+      expect(stub).to have_been_requested
+    end
+  end
 end

@@ -186,6 +186,13 @@ onMounted(load);
                 {{ t.http_method }}
               </span>
               <span
+                v-if="t.is_native"
+                class="text-xs px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-semibold"
+                title="Ferramenta nativa gerenciada pelo sistema (URL e schema fixos)"
+              >
+                Nativa
+              </span>
+              <span
                 v-if="!t.active"
                 class="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-600"
               >
@@ -225,6 +232,7 @@ onMounted(load);
               ✎
             </button>
             <button
+              v-if="!t.is_native"
               class="w-8 h-8 flex items-center justify-center rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400"
               title="Remover"
               @click="remove(t)"
@@ -252,6 +260,14 @@ onMounted(load);
         </h4>
 
         <div class="flex flex-col gap-4">
+          <!-- Aviso ferramenta nativa -->
+          <div
+            v-if="form.is_native"
+            class="text-xs rounded-lg px-3 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+          >
+            Ferramenta <strong>nativa</strong> gerenciada pelo sistema. URL e
+            schema são fixos; você pode apenas ativar/desativar.
+          </div>
           <!-- Name -->
           <label class="flex flex-col gap-1">
             <span
@@ -262,8 +278,10 @@ onMounted(load);
             <input
               v-model="form.name"
               type="text"
+              :disabled="form.is_native"
+              :readonly="form.is_native"
               placeholder="ex: consultar_estoque"
-              class="text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-400"
+              class="text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-400 disabled:opacity-60 disabled:cursor-not-allowed"
             />
             <span class="text-xs text-slate-400"
               >snake_case, apenas letras minúsculas, números e _ — este é o nome
@@ -308,7 +326,8 @@ onMounted(load);
               >
               <select
                 v-model="form.http_method"
-                class="text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-400"
+                :disabled="form.is_native"
+                class="text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-400 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <option v-for="m in HTTP_METHODS" :key="m" :value="m">
                   {{ m }}
@@ -324,8 +343,10 @@ onMounted(load);
               <input
                 v-model="form.endpoint_url"
                 type="url"
+                :disabled="form.is_native"
+                :readonly="form.is_native"
                 placeholder="https://minha-api.com/webhook"
-                class="text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-400"
+                class="text-sm border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-400 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </label>
           </div>
@@ -340,7 +361,9 @@ onMounted(load);
             <textarea
               v-model="form.parameters_schema"
               rows="5"
-              class="text-xs font-mono border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-400 resize-y"
+              :disabled="form.is_native"
+              :readonly="form.is_native"
+              class="text-xs font-mono border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-woot-400 resize-y disabled:opacity-60 disabled:cursor-not-allowed"
             />
             <span class="text-xs text-slate-400"
               >JSON Schema descrevendo os parâmetros que o LLM pode
