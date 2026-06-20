@@ -7,7 +7,7 @@ class AiAgent::GoogleCalendar::ApiClient
   end
 
   def freebusy(calendar_id, time_min, time_max)
-    post('/freeBusy', {
+    post('freeBusy', {
            timeMin: time_min.iso8601,
            timeMax: time_max.iso8601,
            items:   [{ id: calendar_id }]
@@ -15,11 +15,11 @@ class AiAgent::GoogleCalendar::ApiClient
   end
 
   def create_event(calendar_id, event_body)
-    post("/calendars/#{CGI.escape(calendar_id)}/events", event_body)
+    post("calendars/#{CGI.escape(calendar_id)}/events", event_body)
   end
 
   def list_events(calendar_id, time_min, time_max)
-    get("/calendars/#{CGI.escape(calendar_id)}/events", {
+    get("calendars/#{CGI.escape(calendar_id)}/events", {
           timeMin:      time_min.iso8601,
           timeMax:      time_max.iso8601,
           singleEvents: true,
@@ -28,7 +28,7 @@ class AiAgent::GoogleCalendar::ApiClient
   end
 
   def calendar_list(max_results: 100)
-    get('/users/me/calendarList', { maxResults: max_results })
+    get('users/me/calendarList', { maxResults: max_results })
   end
 
   private
