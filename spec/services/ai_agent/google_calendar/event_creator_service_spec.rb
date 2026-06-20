@@ -25,7 +25,7 @@ RSpec.describe AiAgent::GoogleCalendar::EventCreatorService do
     end
   end
 
-  def create(contact_email: nil)
+  def do_create(contact_email: nil)
     described_class.new(schedule,
                         data_hora_inicio: '2026-06-23T14:00:00-03:00',
                         titulo:           'Consulta',
@@ -37,13 +37,13 @@ RSpec.describe AiAgent::GoogleCalendar::EventCreatorService do
 
   it 'força visibility: private' do
     stub_create
-    create
+    do_create
     expect(captured.first['visibility']).to eq('private')
   end
 
   it 'grava extendedProperties.private com lead_phone, conversation_id e created_by' do
     stub_create
-    create
+    do_create
     priv = captured.first.dig('extendedProperties', 'private')
     expect(priv['lead_phone']).to eq('+5519999990000')
     expect(priv['conversation_id']).to eq('conv-7')
@@ -52,20 +52,20 @@ RSpec.describe AiAgent::GoogleCalendar::EventCreatorService do
 
   it 'adiciona o lead como attendee quando há e-mail' do
     stub_create
-    create(contact_email: 'lead@example.com')
+    do_create(contact_email: 'lead@example.com')
     expect(captured.first['attendees']).to eq([{ 'email' => 'lead@example.com' }])
   end
 
   it 'sem e-mail: não adiciona attendee e põe o telefone na descrição' do
     stub_create
-    create(contact_email: nil)
+    do_create(contact_email: nil)
     expect(captured.first['attendees']).to be_nil
     expect(captured.first['description'].to_s).to include('Telefone contato: +5519999990000')
   end
 
   it 'retorna event_id e html_link no sucesso' do
     stub_create
-    result = create
+    result = do_create
     expect(result[:status]).to eq('created')
     expect(result[:event_id]).to eq('evt_123')
     expect(result[:html_link]).to eq('https://cal/evt_123')
@@ -73,7 +73,7 @@ RSpec.describe AiAgent::GoogleCalendar::EventCreatorService do
 
   it 'retorna erro legível (graceful) quando a API falha' do
     stub_request(:post, events_url).to_return(status: 500, body: 'down')
-    result = create
+    result = do_create
     expect(result[:status]).to eq('error')
     expect(result[:erro]).to be_present
   end

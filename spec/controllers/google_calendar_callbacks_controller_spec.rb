@@ -16,6 +16,11 @@ RSpec.describe GoogleCalendarCallbacksController, type: :controller do
 
   before do
     allow(AiAgent::GoogleCalendar::AuthService).to receive(:exchange_code).and_return(token_data)
+    # PrimaryCalendarSelectorService roda após salvar tokens; stub do calendarList
+    # evita HTTP real (WebMock::NetConnectNotAllowedError não é StandardError e não
+    # seria rescued). Por padrão retorna lista vazia (não seta calendar_id).
+    stub_request(:get, %r{googleapis\.com/calendar/v3/users/me/calendarList})
+      .to_return(status: 200, body: { 'items' => [] }.to_json, headers: { 'Content-Type' => 'application/json' })
   end
 
   describe 'GET #callback' do
