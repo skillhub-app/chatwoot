@@ -105,7 +105,13 @@ class AiAgent::ToolExecutor
   def render_template(template, vars)
     template.gsub(/\{\{\s*([\w.]+)\s*\}\}/) do
       path  = $1.split('.')
-      value = vars.dig(*path)
+      # dig por um path quebrado (ex: cavar dentro de um escalar) levanta TypeError;
+      # tratamos como ausente (placeholder vira "") em vez de estourar.
+      value = begin
+        vars.dig(*path)
+      rescue TypeError
+        nil
+      end
       if value.nil?
         Rails.logger.warn "[ToolExecutor] placeholder sem valor: '#{$1}' tool='#{@tool.name}'"
         ''
