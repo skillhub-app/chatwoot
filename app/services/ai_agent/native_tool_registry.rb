@@ -42,8 +42,10 @@ class AiAgent::NativeToolRegistry
           },
           'required' => %w[data_hora_inicio]
         },
-        # Só 'mensagem' (texto sem PII) volta pro LLM; event_id/_audit ficam no log.
-        response_template: '{{mensagem}}'
+        # 'mensagem' (sem PII) + 'meet_link_text' (link Meet do próprio evento, ou
+        # vazio). event_id/_audit ficam só no log. meet_link_text já vem pronto do
+        # EventCreatorService (engine de template não tem condicional).
+        response_template: '{{mensagem}}{{meet_link_text}}'
       },
       {
         native_key:  'gcal_cancelar_agendamento',

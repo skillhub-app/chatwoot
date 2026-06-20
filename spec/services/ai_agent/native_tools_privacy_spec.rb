@@ -21,10 +21,12 @@ RSpec.describe 'Native calendar tools — privacidade do formatted_for_llm' do
 
   PII_PATTERNS = ['+5519999990000', 'evt_secret', 'extendedProperties', 'lead_phone'].freeze
 
-  it 'criar_agendamento: mensagem ao LLM sem PII; auditoria guarda o telefone' do
+  it 'criar_agendamento: mensagem + meet_link ao LLM, sem PII; auditoria guarda o telefone' do
     stub_request(:post, %r{/ai_agent_calendar/criar_agendamento}).to_return(
       status: 200,
       body: { status: 'created', event_id: 'evt_secret', html_link: 'https://cal/evt_secret',
+              meet_link: 'https://meet.google.com/abc-defg-hij',
+              meet_link_text: ' Link da reunião: https://meet.google.com/abc-defg-hij',
               start: '2026-06-23T14:00:00-03:00', mensagem: 'Reunião agendada com sucesso para 23/06 às 14:00.',
               _audit: { lead_phone: '+5519999990000', conversation_id: 'conv-1', contact_id: '99' } }.to_json,
       headers: { 'Content-Type' => 'application/json' }
@@ -34,8 +36,28 @@ RSpec.describe 'Native calendar tools — privacidade do formatted_for_llm' do
 
     PII_PATTERNS.each { |p| expect(result.formatted_for_llm).not_to include(p) }
     expect(result.formatted_for_llm).to include('agendada')
+    # meet_link do próprio evento PODE aparecer (não vaza nada de terceiros)
+    expect(result.formatted_for_llm).to include('https://meet.google.com/abc-defg-hij')
+    # mas event_id continua fora do texto pro LLM
+    expect(result.formatted_for_llm).not_to include('evt_secret')
     # auditoria (output_result) preserva o telefone derivado server-side
     expect(AiAgent::ToolExecution.last.output_result.dig('_audit', 'lead_phone')).to eq('+5519999990000')
+  end
+
+  it 'criar_agendamento: sem meet_link, formatted_for_llm OMITE a linha de reunião' do
+    stub_request(:post, %r{/ai_agent_calendar/criar_agendamento}).to_return(
+      status: 200,
+      body: { status: 'created', event_id: 'evt_x', html_link: 'https://cal/evt_x',
+              meet_link: nil, meet_link_text: '',
+              mensagem: 'Reunião agendada com sucesso para 23/06 às 14:00.',
+              _audit: { lead_phone: '+5519999990000', conversation_id: 'conv-1', contact_id: '99' } }.to_json,
+      headers: { 'Content-Type' => 'application/json' }
+    )
+
+    result = run('gcal_criar_agendamento', 'data_hora_inicio' => '2026-06-23T14:00:00-03:00')
+
+    expect(result.formatted_for_llm).to include('agendada')
+    expect(result.formatted_for_llm).not_to include('Link da reunião')
   end
 
   it 'cancelar_agendamento: mensagem ao LLM sem PII' do
