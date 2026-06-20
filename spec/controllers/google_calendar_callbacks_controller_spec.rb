@@ -43,6 +43,44 @@ RSpec.describe GoogleCalendarCallbacksController, type: :controller do
         existing.reload
         expect(existing.google_access_token_encrypted).to eq('access_token_value')
       end
+
+      it 'aciona o PrimaryCalendarSelectorService após salvar os tokens' do
+        selector = instance_double(AiAgent::GoogleCalendar::PrimaryCalendarSelectorService, call: 'primary@gmail.com')
+        expect(AiAgent::GoogleCalendar::PrimaryCalendarSelectorService)
+          .to receive(:new).with(an_instance_of(AiAgentSchedule)).and_return(selector)
+
+        get :callback, params: { state: valid_state, code: valid_code }
+
+        expect(response).to redirect_to(
+          "http://localhost:3000/app/accounts/#{account.id}/settings/ai-agents/#{agent.id}?calendar=connected"
+        )
+      end
+
+      it 'persiste a primary calendar selecionada (end-to-end)' do
+        stub_request(:get, 'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=100')
+          .to_return(
+            status:  200,
+            body:    { 'items' => [{ 'id' => 'primary@gmail.com', 'primary' => true }] }.to_json,
+            headers: { 'Content-Type' => 'application/json' }
+          )
+
+        get :callback, params: { state: valid_state, code: valid_code }
+
+        expect(agent.reload.ai_agent_schedule.google_calendar_id).to eq('primary@gmail.com')
+      end
+
+      it 'mantém o sucesso da conexão mesmo se a seleção da agenda falhar (graceful)' do
+        allow_any_instance_of(AiAgent::GoogleCalendar::PrimaryCalendarSelectorService)
+          .to receive(:call).and_return(nil)
+
+        get :callback, params: { state: valid_state, code: valid_code }
+
+        schedule = agent.reload.ai_agent_schedule
+        expect(schedule.google_refresh_token_encrypted).to eq('refresh_token_value')
+        expect(response).to redirect_to(
+          "http://localhost:3000/app/accounts/#{account.id}/settings/ai-agents/#{agent.id}?calendar=connected"
+        )
+      end
     end
 
     context 'com state inválido (sem ":")' do

@@ -36,6 +36,9 @@ class GoogleCalendarCallbacksController < ApplicationController
       google_token_expires_at:        Time.current + token_data['expires_in'].to_i.seconds
     )
 
+    # Auto-seleciona a primary calendar (graceful: nunca bloqueia a conexão).
+    AiAgent::GoogleCalendar::PrimaryCalendarSelectorService.new(schedule).call
+
     Rails.logger.info "[GoogleCalendar] Connected agent_id=#{agent_id} account_id=#{account_id}"
     redirect_to success_url(account_id, agent_id), allow_other_host: true
   rescue StandardError => e

@@ -27,6 +27,10 @@ class AiAgent::GoogleCalendar::ApiClient
         })
   end
 
+  def calendar_list(max_results: 100)
+    get('/users/me/calendarList', { maxResults: max_results })
+  end
+
   private
 
   def ensure_valid_token!
