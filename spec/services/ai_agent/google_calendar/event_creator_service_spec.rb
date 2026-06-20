@@ -17,12 +17,26 @@ RSpec.describe AiAgent::GoogleCalendar::EventCreatorService do
   let(:events_url) { 'https://www.googleapis.com/calendar/v3/calendars/primary%40gmail.com/events' }
   let(:captured)   { [] }
 
-  def stub_create
-    stub_request(:post, events_url).to_return do |req|
-      captured << JSON.parse(req.body)
-      { status: 200, body: { 'id' => 'evt_123', 'htmlLink' => 'https://cal/evt_123' }.to_json,
-        headers: { 'Content-Type' => 'application/json' } }
-    end
+  def stub_create(response_body = { 'id' => 'evt_123', 'htmlLink' => 'https://cal/evt_123' })
+    stub_request(:post, events_url)
+      .with(query: { 'conferenceDataVersion' => '1' })
+      .to_return do |req|
+        captured << JSON.parse(req.body)
+        { status: 200, body: response_body.to_json, headers: { 'Content-Type' => 'application/json' } }
+      end
+  end
+
+  # Resposta do Google com um Google Meet (entryPoint de vídeo).
+  def body_with_meet(uri = 'https://meet.google.com/abc-defg-hij')
+    {
+      'id' => 'evt_123', 'htmlLink' => 'https://cal/evt_123',
+      'conferenceData' => {
+        'entryPoints' => [
+          { 'entryPointType' => 'phone', 'uri' => 'tel:+551112345678' },
+          { 'entryPointType' => 'video', 'uri' => uri }
+        ]
+      }
+    }
   end
 
   def do_create(contact_email: nil)
@@ -71,8 +85,40 @@ RSpec.describe AiAgent::GoogleCalendar::EventCreatorService do
     expect(result[:html_link]).to eq('https://cal/evt_123')
   end
 
+  it 'envia conferenceData.createRequest (hangoutsMeet) no payload' do
+    stub_create
+    do_create
+    cr = captured.first.dig('conferenceData', 'createRequest')
+    expect(cr['conferenceSolutionKey']).to eq({ 'type' => 'hangoutsMeet' })
+    expect(cr['requestId']).to be_present
+  end
+
+  it 'usa conferenceDataVersion=1 na chamada' do
+    stub_create
+    do_create
+    expect(
+      a_request(:post, events_url).with(query: { 'conferenceDataVersion' => '1' })
+    ).to have_been_made
+  end
+
+  it 'captura o meet_link quando o Google retorna conferenceData' do
+    stub_create(body_with_meet('https://meet.google.com/xyz-1234-abc'))
+    result = do_create
+    expect(result[:meet_link]).to eq('https://meet.google.com/xyz-1234-abc')
+    expect(result[:meet_link_text]).to include('Link da reunião: https://meet.google.com/xyz-1234-abc')
+  end
+
+  it 'meet_link nil (graceful) quando o Google NÃO retorna conferenceData' do
+    stub_create # body sem conferenceData
+    result = do_create
+    expect(result[:status]).to eq('created')
+    expect(result[:html_link]).to eq('https://cal/evt_123')
+    expect(result[:meet_link]).to be_nil
+    expect(result[:meet_link_text]).to eq('')
+  end
+
   it 'retorna erro legível (graceful) quando a API falha' do
-    stub_request(:post, events_url).to_return(status: 500, body: 'down')
+    stub_request(:post, events_url).with(query: { 'conferenceDataVersion' => '1' }).to_return(status: 500, body: 'down')
     result = do_create
     expect(result[:status]).to eq('error')
     expect(result[:erro]).to be_present

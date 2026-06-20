@@ -14,8 +14,8 @@ class AiAgent::GoogleCalendar::ApiClient
          })
   end
 
-  def create_event(calendar_id, event_body)
-    post("calendars/#{CGI.escape(calendar_id)}/events", event_body)
+  def create_event(calendar_id, event_body, query = {})
+    post("calendars/#{CGI.escape(calendar_id)}/events", event_body, query)
   end
 
   def list_events(calendar_id, time_min, time_max)
@@ -85,9 +85,10 @@ class AiAgent::GoogleCalendar::ApiClient
     response.body
   end
 
-  def post(path, body)
+  def post(path, body, query = {})
     response = conn.post(path) do |req|
       req.headers['Authorization'] = "Bearer #{access_token}"
+      req.params = query if query.present?
       req.body = body
     end
     raise "Google Calendar API error: #{response.body}" unless response.success?

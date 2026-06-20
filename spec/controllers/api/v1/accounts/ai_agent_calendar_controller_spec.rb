@@ -104,6 +104,7 @@ RSpec.describe 'AiAgentCalendar internal endpoints', type: :request do
   describe 'criar_agendamento — resposta não vaza PII pro LLM' do
     it 'mensagem é legível e sem telefone/event_id; _audit guarda o telefone' do
       stub_request(:post, 'https://www.googleapis.com/calendar/v3/calendars/primary%40gmail.com/events')
+        .with(query: { 'conferenceDataVersion' => '1' })
         .to_return(status: 200, body: { 'id' => 'evt_secret', 'htmlLink' => 'https://cal/evt_secret' }.to_json,
                    headers: { 'Content-Type' => 'application/json' })
 

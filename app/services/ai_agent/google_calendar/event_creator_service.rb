@@ -28,15 +28,23 @@ class AiAgent::GoogleCalendar::EventCreatorService
     return error('Data/hora inválida') if start_t.blank?
 
     end_t  = start_t + @schedule.slot_duration_minutes.minutes
+    # conferenceDataVersion=1 é obrigatório pra o Google processar o createRequest do Meet.
     result = AiAgent::GoogleCalendar::ApiClient.new(@schedule)
-                                              .create_event(@schedule.google_calendar_id, build_event(start_t, end_t, tz_name))
+                                              .create_event(@schedule.google_calendar_id,
+                                                            build_event(start_t, end_t, tz_name),
+                                                            { conferenceDataVersion: 1 })
+
+    meet_link = extract_meet_link(result)
 
     {
-      event_id:  result['id'],
-      html_link: result['htmlLink'],
-      start:     start_t.iso8601,
-      end:       end_t.iso8601,
-      status:    'created'
+      event_id:       result['id'],
+      html_link:      result['htmlLink'],
+      meet_link:      meet_link,
+      # campo de apresentação pro response_template (sem condicional no template engine):
+      meet_link_text: meet_link.present? ? " Link da reunião: #{meet_link}" : '',
+      start:          start_t.iso8601,
+      end:            end_t.iso8601,
+      status:         'created'
     }
   rescue StandardError => e
     Rails.logger.error "[AiAgent] EventCreatorService error schedule=#{@schedule.id}: #{e.message}"
@@ -58,10 +66,25 @@ class AiAgent::GoogleCalendar::EventCreatorService
           conversation_id: @conversation_id.to_s,
           created_by:      "ai_agent_#{@ai_agent_id}"
         }
+      },
+      # Pede ao Google pra gerar um Google Meet junto do evento.
+      conferenceData: {
+        createRequest: {
+          requestId:             SecureRandom.uuid,
+          conferenceSolutionKey: { type: 'hangoutsMeet' }
+        }
       }
     }
     event[:attendees] = [{ email: @contact_email }] if @contact_email.present?
     event.compact
+  end
+
+  # Pega o link do Meet do evento recém-criado (entryPoint de vídeo). Graceful:
+  # se a conferência não foi criada, retorna nil — o agendamento continua válido.
+  def extract_meet_link(result)
+    entries = Array(result.dig('conferenceData', 'entryPoints'))
+    entry   = entries.find { |e| e['entryPointType'] == 'video' } || entries.first
+    entry&.dig('uri').presence
   end
 
   def description_text
