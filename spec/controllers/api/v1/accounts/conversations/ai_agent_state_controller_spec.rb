@@ -111,6 +111,50 @@ RSpec.describe 'Conversation AI Agent State API', type: :request do
     end
   end
 
+  describe 'garantia absoluta de etiqueta + activity (v65)' do
+    let(:auth) { { api_access_token: agent_user.access_token.token } }
+
+    it 'conversa sem etiqueta + liga → ia_ligada SOZINHA + activity' do
+      ai_conv.update!(state: 'paused')
+      conversation.update!(label_list: [])
+      expect(AiAgent::ActivityService).to receive(:ai_enabled)
+
+      patch base_url, params: { state: 'active' }, headers: auth
+
+      expect(conversation.reload.label_list).to contain_exactly('ia_ligada')
+    end
+
+    it 'já active + liga de novo → ia_ligada sozinha, idempotente (SEM activity duplicada)' do
+      ai_conv.update!(state: 'active')
+      conversation.update!(label_list: ['ia_ligada'])
+      expect(AiAgent::ActivityService).not_to receive(:ai_enabled)
+
+      patch base_url, params: { state: 'active' }, headers: auth
+
+      expect(conversation.reload.label_list).to contain_exactly('ia_ligada')
+    end
+
+    it 'com ia_ligada + desliga → ia_desligada SOZINHA + activity' do
+      ai_conv.update!(state: 'active')
+      conversation.update!(label_list: ['ia_ligada'])
+      expect(AiAgent::ActivityService).to receive(:ai_disabled)
+
+      patch base_url, params: { state: 'paused' }, headers: auth
+
+      expect(conversation.reload.label_list).to contain_exactly('ia_desligada')
+    end
+
+    it 'reactivate de paused → ia_ligada sozinha + activity' do
+      ai_conv.update!(state: 'paused')
+      conversation.update!(label_list: ['ia_desligada'])
+      expect(AiAgent::ActivityService).to receive(:ai_enabled)
+
+      post "#{base_url}/reactivate", headers: auth
+
+      expect(conversation.reload.label_list).to contain_exactly('ia_ligada')
+    end
+  end
+
   describe 'POST ai_agent_state/reactivate' do
     context 'de state=transferred (handoff via protocolo)' do
       before { ai_conv.update!(state: 'transferred', paused_reason: 'protocol:human') }

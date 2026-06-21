@@ -350,16 +350,23 @@ class Message < ApplicationRecord
     # Fonte de verdade = ai_agent_conversation.state. Sincronizamos state E labels
     # juntos pra UI (toggle) e portões nunca dessincronizarem.
     if has_reactivation
+      was_active = ai_conv&.state == 'active'
       ai_conv ||= AiAgentConversation.create!(ai_agent: agent, conversation: conversation,
                                               contact: conversation.contact, state: 'active')
       ai_conv.resume!
       sync_ai_state_labels('active')
+      AiAgent::ActivityService.ai_enabled(conversation, by: sender_name_for_activity) unless was_active
     elsif ai_conv&.state == 'active'
       ai_conv.pause!('manual')
       sync_ai_state_labels('paused')
+      AiAgent::ActivityService.ai_auto_paused(conversation)
     end
   rescue StandardError => e
     Rails.logger.error "pause_ai_on_human_response error: #{e.message}"
+  end
+
+  def sender_name_for_activity
+    sender.is_a?(User) ? sender.name : nil
   end
 
   def sync_ai_state_labels(state)
