@@ -36,8 +36,9 @@ RSpec.describe 'AI toggle state/label sync', type: :model do
   end
 
   describe 'pause_ai_on_human_response sincroniza state E labels' do
-    it 'humano responde → state=paused + label ia_desligada' do
+    it 'humano responde → state=paused + label ia_desligada + activity (v65)' do
       ai_conv = AiAgentConversation.create!(ai_agent: agent, conversation: conversation, state: 'active')
+      expect(AiAgent::ActivityService).to receive(:ai_auto_paused).with(conversation)
 
       human_reply!
 
