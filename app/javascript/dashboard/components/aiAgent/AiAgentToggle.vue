@@ -2,6 +2,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import ConversationApi from 'dashboard/api/inbox/conversation';
+import { useAlert } from 'dashboard/composables';
 
 const props = defineProps({
   conversationId: { type: [Number, String], required: true },
@@ -65,25 +66,32 @@ async function loadState() {
 }
 
 async function toggleAi(newValue) {
+  if (loading.value) return; // previne duplo clique
   loading.value = true;
   const state = newValue ? 'active' : 'paused';
   try {
     await ConversationApi.updateAiAgentState(props.conversationId, state);
     await loadState();
+    useAlert(newValue ? 'IA ativada nesta conversa.' : 'IA desativada nesta conversa.');
   } catch {
-    // ignore
+    // rollback: re-sincroniza a UI com o estado real do backend
+    await loadState();
+    useAlert('Não foi possível alterar o estado da IA. Tente novamente.');
   } finally {
     loading.value = false;
   }
 }
 
 async function reactivate() {
+  if (loading.value) return;
   loading.value = true;
   try {
     await ConversationApi.reactivateAiAgent(props.conversationId);
     await loadState();
+    useAlert('IA reativada nesta conversa.');
   } catch {
-    // ignore
+    await loadState();
+    useAlert('Não foi possível reativar a IA. Tente novamente.');
   } finally {
     loading.value = false;
   }

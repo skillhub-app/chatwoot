@@ -1,0 +1,75 @@
+name: Sprint v64 spec (toggle + vision)
+
+permissions:
+  contents: read
+
+# Roda só os specs da sprint v64 (toggle IA + vision/PDF). Não toca os outros
+# workflows. Não gateia o deploy (workflow separado) — sinal de regressão.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/models/message.rb'
+      - 'app/models/attachment.rb'
+      - 'app/services/ai_agent/**'
+      - 'app/jobs/ai_agent/**'
+      - 'spec/services/ai_agent/**'
+      - 'spec/jobs/ai_agent/**'
+      - '.github/workflows/sprint_v64_spec.yml'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  sprint-v64-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ''
+          POSTGRES_DB: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --mount type=tmpfs,destination=/var/lib/postgresql/data
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: --entrypoint redis-server
+
+    env:
+      RAILS_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Strip enterprise code
+        run: |
+          rm -rf enterprise
+          rm -rf spec/enterprise
+
+      - name: Create database
+        run: bundle exec rake db:create
+
+      - name: Load schema
+        run: bundle exec rake db:schema:load
+
+      - name: Run sprint v64 specs
+        run: |
+          bundle exec rspec --format progress \
+            spec/services/ai_agent/toggle_sync_spec.rb \
+            spec/services/ai_agent/attachment_analyzer_service_spec.rb \
+            spec/jobs/ai_agent/attachment_analyzer_job_spec.rb

@@ -341,22 +341,37 @@ class Message < ApplicationRecord
     return if conversation.inbox.agent_bot_inbox&.agent_bot.present?
 
     agent             = ::AiAgent.find_by(inbox: conversation.inbox, active: true)
-    reactivation_cmd  = agent&.reactivation_command.to_s.strip
-    has_reactivation  = reactivation_cmd.present? && content.to_s.include?(reactivation_cmd)
+    return unless agent
 
+    reactivation_cmd  = agent.reactivation_command.to_s.strip
+    has_reactivation  = reactivation_cmd.present? && content.to_s.include?(reactivation_cmd)
+    ai_conv           = AiAgentConversation.find_by(ai_agent: agent, conversation: conversation)
+
+    # Fonte de verdade = ai_agent_conversation.state. Sincronizamos state E labels
+    # juntos pra UI (toggle) e portões nunca dessincronizarem.
     if has_reactivation
-      current_labels = conversation.label_list.to_a
-      current_labels.delete('ia_desligada')
-      current_labels |= ['ia_ligada']
-      conversation.update!(label_list: current_labels)
-    elsif conversation.label_list.include?('ia_ligada')
-      current_labels = conversation.label_list.to_a
-      current_labels.delete('ia_ligada')
-      current_labels |= ['ia_desligada']
-      conversation.update!(label_list: current_labels)
+      ai_conv ||= AiAgentConversation.create!(ai_agent: agent, conversation: conversation,
+                                              contact: conversation.contact, state: 'active')
+      ai_conv.resume!
+      sync_ai_state_labels('active')
+    elsif ai_conv&.state == 'active'
+      ai_conv.pause!('manual')
+      sync_ai_state_labels('paused')
     end
   rescue StandardError => e
     Rails.logger.error "pause_ai_on_human_response error: #{e.message}"
+  end
+
+  def sync_ai_state_labels(state)
+    labels = conversation.label_list.to_a
+    if state == 'active'
+      labels.delete('ia_desligada')
+      labels |= ['ia_ligada']
+    else
+      labels.delete('ia_ligada')
+      labels |= ['ia_desligada']
+    end
+    conversation.update!(label_list: labels)
   end
 
   def update_contact_activity

@@ -38,6 +38,7 @@ class Attachment < ApplicationRecord
   belongs_to :message
   has_one_attached :file
   before_save :set_extension
+  after_create_commit :enqueue_ai_attachment_analysis
   validate :acceptable_file
   validates :external_url, length: { maximum: Limits::URL_LENGTH_LIMIT }
   enum file_type: { :image => 0, :audio => 1, :video => 2, :file => 3, :location => 4, :fallback => 5, :share => 6, :story_mention => 7,
@@ -76,6 +77,19 @@ class Attachment < ApplicationRecord
   end
 
   private
+
+  # Espelha o enqueue de transcrição de áudio: imagens e arquivos (PDF) de
+  # mensagens incoming em inboxes com agente de IA ativo são analisados em
+  # background (AttachmentAnalyzerJob) pra IA "ver"/"ler" o conteúdo.
+  def enqueue_ai_attachment_analysis
+    return unless %i[image file].include?(file_type.to_sym)
+    return unless message&.incoming?
+    return unless AiAgent.exists?(inbox_id: message.inbox_id, active: true)
+
+    AiAgent::AttachmentAnalyzerJob.perform_later(id)
+  rescue StandardError => e
+    Rails.logger.warn "[Attachment] enqueue AI analysis falhou (att=#{id}): #{e.message}"
+  end
 
   def metadata_for_file_type
     case file_type.to_sym
