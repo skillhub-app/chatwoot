@@ -11,11 +11,11 @@ RSpec.describe AiAgent::AttachmentAnalyzerJob do
     att
   end
 
-  before { allow(AiAgent::IncomingMessageProcessor).to receive(:call) }
-
   it 'imagem: grava image_description + ai_analyzed e re-processa a mensagem' do
     att = build_attachment(:image, 'image/png')
     allow_any_instance_of(AiAgent::AttachmentAnalyzerService).to receive(:analyze_image).and_return('uma foto de um documento')
+    # stub só depois de criar o anexo, pra capturar apenas o re-processo do job
+    allow(AiAgent::IncomingMessageProcessor).to receive(:call)
 
     described_class.perform_now(att.id)
 
@@ -28,6 +28,7 @@ RSpec.describe AiAgent::AttachmentAnalyzerJob do
   it 'pdf (file): grava pdf_text + ai_analyzed' do
     att = build_attachment(:file, 'application/pdf')
     allow_any_instance_of(AiAgent::AttachmentAnalyzerService).to receive(:analyze_pdf).and_return('texto do contrato')
+    allow(AiAgent::IncomingMessageProcessor).to receive(:call)
 
     described_class.perform_now(att.id)
 
@@ -37,6 +38,7 @@ RSpec.describe AiAgent::AttachmentAnalyzerJob do
   it 'falha do analyzer: marca ai_analyzed (graceful), não levanta, mensagem segue' do
     att = build_attachment(:image, 'image/png')
     allow_any_instance_of(AiAgent::AttachmentAnalyzerService).to receive(:analyze_image).and_raise(StandardError, 'boom')
+    allow(AiAgent::IncomingMessageProcessor).to receive(:call)
 
     expect { described_class.perform_now(att.id) }.not_to raise_error
     att.reload
