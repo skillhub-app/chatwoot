@@ -31,11 +31,14 @@ class AiAgent::IncomingMessageProcessor
     return false if @message.content_type == 'activity'
     return false if message_content.blank?
     return false if audio_pending_transcription?
-    return false if @conversation.label_list.include?('ia_desligada')
+    return false if ai_attachment_pending?
 
     @agent = ::AiAgent.find_by(inbox: @inbox, active: true)
     return false unless @agent
 
+    # Fonte de verdade única = ai_agent_conversation.state (mesmo portão do
+    # ProcessMessageJob). A label ia_desligada é apenas reflexo do state, mantida
+    # em sync pelo controller e pelo pause_ai_on_human_response.
     ai_conv = find_or_create_ai_conversation
     ai_conv.state == 'active'
   end
@@ -55,14 +58,20 @@ class AiAgent::IncomingMessageProcessor
   end
 
   def extract_message_content(message)
-    base       = message.content.to_s.strip
-    audio_text = extract_audio_transcription(message)
+    parts = []
+    base  = message.content.to_s.strip
+    parts << base if base.present?
 
-    if audio_text.present?
-      base.present? ? "#{base}\n\n[Áudio]: #{audio_text}" : "[Áudio]: #{audio_text}"
-    else
-      base
-    end
+    audio_text = extract_audio_transcription(message)
+    parts << "[Áudio]: #{audio_text}" if audio_text.present?
+
+    image_text = extract_attachment_descriptions(message, :image, 'image_description', 'Imagem')
+    parts << image_text if image_text.present?
+
+    pdf_text = extract_attachment_descriptions(message, :file, 'pdf_text', 'Documento')
+    parts << pdf_text if pdf_text.present?
+
+    parts.join("\n\n")
   end
 
   def extract_audio_transcription(message)
@@ -70,6 +79,29 @@ class AiAgent::IncomingMessageProcessor
            .where(file_type: :audio)
            .filter_map { |att| att.meta&.dig('transcribed_text') }
            .join(' ')
+  end
+
+  def extract_attachment_descriptions(message, type, meta_key, label)
+    atts = message.attachments.where(file_type: type)
+    return nil if atts.empty?
+
+    atts.filter_map do |att|
+      value = att.meta&.dig(meta_key)
+      if value.present?
+        "[#{label}]: #{value}"
+      elsif att.meta&.dig('ai_analyzed')
+        "[#{label} enviado mas não foi possível processar o conteúdo]"
+      end
+    end.join("\n\n").presence
+  end
+
+  # Bloqueia o processamento enquanto imagem/PDF ainda não foram analisados
+  # (espelha audio_pending_transcription?). O AttachmentAnalyzerJob seta
+  # ai_analyzed (mesmo em falha) e re-chama este processor.
+  def ai_attachment_pending?
+    @message.attachments
+            .where(file_type: %i[image file])
+            .any? { |att| !att.meta&.dig('ai_analyzed') }
   end
 
   # Returns true when the message has an audio attachment whose transcription

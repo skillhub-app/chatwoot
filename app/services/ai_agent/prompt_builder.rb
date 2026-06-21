@@ -225,17 +225,32 @@ class AiAgent::PromptBuilder
                         .filter_map { |att| att.meta&.dig('transcribed_text') }
                         .join(' ')
 
-    if audio_text.present?
-      if message.message_type == 'incoming'
-        base.present? ? "#{base}\n\n[Áudio]: #{audio_text}" : "[Áudio]: #{audio_text}"
-      else
-        # AI TTS outgoing: drop the [Áudio]: prefix and strip inherited "Áudio. Áudio. " artifacts
-        clean = audio_text.gsub(/\A(\s*[Áá]udio[.\s]*)+/i, '').strip
-        clean.presence || audio_text
-      end
-    else
-      base
+    # Outgoing (TTS da IA): mantém o comportamento original (sem injetar anexos).
+    if message.message_type != 'incoming'
+      return base if audio_text.blank?
+
+      clean = audio_text.gsub(/\A(\s*[Áá]udio[.\s]*)+/i, '').strip
+      return clean.presence || audio_text
     end
+
+    # Incoming: base + áudio + imagem + documento (PDF).
+    image_text = history_attachment_text(message, :image, 'image_description')
+    pdf_text   = history_attachment_text(message, :file, 'pdf_text')
+
+    parts = []
+    parts << base if base.present?
+    parts << "[Áudio]: #{audio_text}" if audio_text.present?
+    parts << "[Imagem]: #{image_text}" if image_text.present?
+    parts << "[Documento]: #{pdf_text}" if pdf_text.present?
+    parts.join("\n\n")
+  end
+
+  def history_attachment_text(message, type, meta_key)
+    message.attachments
+           .where(file_type: type)
+           .filter_map { |att| att.meta&.dig(meta_key) }
+           .join("\n")
+           .presence
   end
 
   def build_new_messages
