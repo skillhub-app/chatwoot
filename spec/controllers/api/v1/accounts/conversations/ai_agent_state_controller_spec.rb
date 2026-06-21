@@ -65,7 +65,7 @@ RSpec.describe 'Conversation AI Agent State API', type: :request do
       end
 
       it 'adiciona label ia_ligada e remove ia_desligada' do
-        conversation.labels.push('ia_desligada')
+        conversation.update!(label_list: ['ia_desligada'])
         patch base_url,
               params: { state: 'active' },
               headers: { api_access_token: agent_user.access_token.token }

@@ -33,7 +33,9 @@ class Api::V1::Accounts::Conversations::AiAgentStateController < Api::V1::Accoun
   private
 
   def set_conversation
-    @conversation = Current.account.conversations.find(params[:conversation_id])
+    # O frontend envia o display_id (convenção dos demais controllers de conversa).
+    # Usar .find (por PK) só funcionava quando id == display_id (conta única).
+    @conversation = Current.account.conversations.find_by!(display_id: params[:conversation_id])
   end
 
   def set_ai_conv
