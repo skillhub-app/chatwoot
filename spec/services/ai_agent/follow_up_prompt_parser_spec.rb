@@ -61,17 +61,32 @@ RSpec.describe AiAgent::FollowUpPromptParser do
     end
   end
 
-  describe '#call — build_template_prompt' do
-    it 'contém "Exemplo de mensagem:" quando detectado como template' do
-      result = parser('Oi, passando para ver como está.').call
-      expect(result).to include('Exemplo de mensagem:')
+  # v66 (Fix B): o prompt passou a usar tags XML em vez de cabeçalhos "## ..."
+  # (que o LLM ecoava) e a carregar regras de saída explícitas.
+  describe '#call — build_template_prompt (v66: XML tags)' do
+    subject(:result) { parser('Oi, passando para ver como está.').call }
+
+    it 'usa delimitadores XML em vez de cabeçalhos "##"' do
+      expect(result).to include('<exemplo_de_mensagem>')
+      expect(result).to include('<contexto_recente>')
+      expect(result).to include('<instrucao>')
+      expect(result).not_to include('Exemplo de mensagem:')
+      expect(result).not_to match(/^\s*##\s/)
+    end
+
+    it 'inclui regras críticas de saída (não copiar / sem markdown)' do
+      expect(result).to match(/N[ÃA]O copie esta instru/i)
+      expect(result).to match(/APENAS o texto da mensagem/i)
     end
   end
 
-  describe '#call — build_command_prompt' do
-    it 'contém "Instrução:" quando detectado como comando' do
-      result = parser('Analise o contexto e escreva uma mensagem de follow-up').call
-      expect(result).to include('Instrução:')
+  describe '#call — build_command_prompt (v66: XML tags)' do
+    subject(:result) { parser('Analise o contexto e escreva uma mensagem de follow-up').call }
+
+    it 'usa <instrucao_operador> em vez de cabeçalho "Instrução:"' do
+      expect(result).to include('<instrucao_operador>')
+      expect(result).to include('<instrucao>')
+      expect(result).not_to match(/^\s*##\s/)
     end
   end
 

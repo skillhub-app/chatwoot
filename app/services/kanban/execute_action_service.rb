@@ -267,7 +267,17 @@ class Kanban::ExecuteActionService
       raise "LLM retornou mensagem vazia"
     end
 
-    text = response.text.strip.first(4000)
+    # v66 (Fix A): blindagem contra vazamento de scaffold do prompt (o Gemini Flash
+    # Lite ocasionalmente ecoa "Sua tarefa:", "(Aguardando resposta...)", "##", "---").
+    # Nunca enviar essas meta-instruções ao WhatsApp do lead.
+    text = AiAgent::FollowUpOutputSanitizer.call(response.text)
+
+    if text.blank?
+      Rails.logger.error "[FollowUpAI] resposta ficou vazia após sanitização para item #{@item.id}"
+      raise "LLM retornou mensagem vazia"
+    end
+
+    text = text.first(4000)
     Rails.logger.info "[FollowUpAI] Gerada mensagem de #{text.length} chars para item #{@item.id}"
     text
   end

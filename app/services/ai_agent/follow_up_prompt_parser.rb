@@ -59,37 +59,57 @@ class AiAgent::FollowUpPromptParser
       .gsub(/\{\{etapa\}\}|\[etapa\]/i, stage&.name.to_s)
   end
 
+  # v66 (Fix B): usamos delimitadores XML em vez de cabeçalhos "## ..." e damos
+  # regras de saída explícitas. Tags XML são muito menos propensas a serem ecoadas
+  # pelo modelo do que títulos markdown, reduzindo o vazamento de scaffold na origem.
   def build_template_prompt(template)
     <<~PROMPT
-      Use o seguinte modelo como EXEMPLO de tom e estilo, mas adapte
-      ao contexto da conversa abaixo. Gere uma versão personalizada
-      e única (não copie literalmente):
-
-      ## Exemplo de mensagem:
+      <exemplo_de_mensagem>
       #{template}
+      </exemplo_de_mensagem>
 
-      ## Contexto da conversa (últimas 20 mensagens):
+      <contexto_recente>
       #{recent_messages_text}
+      </contexto_recente>
 
-      ## Sua tarefa:
-      Gere uma mensagem similar ao exemplo, mas personalizada ao
-      momento atual da conversa. Mantenha o tom e propósito do exemplo.
+      <instrucao>
+      Gere UMA mensagem de follow-up natural baseada no exemplo e no contexto acima.
+
+      REGRAS CRÍTICAS de saída:
+      - Retorne APENAS o texto da mensagem final ao lead
+      - NÃO copie esta instrução nem os títulos/tags acima
+      - NÃO use markdown (asteriscos, hashtags, traços, sublinhados, crases)
+      - NÃO use parênteses metacomentando seu raciocínio (ex.: "(aguardando resposta)")
+      - NÃO repita as tags XML acima
+      - Comece DIRETO pela saudação ao lead
+      - Tom natural e humano
+      </instrucao>
     PROMPT
   end
 
   def build_command_prompt(command)
     <<~PROMPT
-      Siga a instrução abaixo considerando o contexto da conversa:
-
-      ## Instrução:
+      <instrucao_operador>
       #{command}
+      </instrucao_operador>
 
-      ## Contexto da conversa (últimas 20 mensagens):
+      <contexto_recente>
       #{recent_messages_text}
+      </contexto_recente>
 
-      ## Sua tarefa:
-      Cumpra a instrução acima gerando uma mensagem WhatsApp
+      <instrucao>
+      Cumpra a instrução do operador acima gerando UMA mensagem de WhatsApp
       apropriada ao estado atual da conversa.
+
+      REGRAS CRÍTICAS de saída:
+      - Retorne APENAS o texto da mensagem final ao lead
+      - NÃO copie esta instrução nem os títulos/tags acima
+      - NÃO use markdown (asteriscos, hashtags, traços, sublinhados, crases)
+      - NÃO use parênteses metacomentando seu raciocínio
+      - NÃO repita as tags XML acima
+      - Comece DIRETO pela mensagem ao lead
+      - Tom natural e humano
+      </instrucao>
     PROMPT
   end
 
