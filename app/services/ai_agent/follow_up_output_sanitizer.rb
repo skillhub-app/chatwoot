@@ -26,7 +26,7 @@ class AiAgent::FollowUpOutputSanitizer
   ].freeze
 
   # WhatsApp não renderiza markdown — removemos os caracteres de formatação.
-  MARKDOWN_CHARS = /[*_#`]/.freeze
+  MARKDOWN_CHARS = /[*_#`]/
 
   def self.call(raw_text)
     new(raw_text).call
@@ -48,7 +48,7 @@ class AiAgent::FollowUpOutputSanitizer
   # Quando o LLM ecoa a linha "Sua tarefa ...", a mensagem real ao lead costuma vir
   # logo DEPOIS. Cortamos tudo até (e incluindo) a última ocorrência dessa linha.
   def drop_everything_before_last_task_header
-    return unless @text =~ /sua tarefa/i
+    return unless @text.match?(/sua tarefa/i)
 
     parts = @text.split(/^\s*\*?\s*sua tarefa\b.*$/i)
     @text = parts.last.to_s if parts.size > 1

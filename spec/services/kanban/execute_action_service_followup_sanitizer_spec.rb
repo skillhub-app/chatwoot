@@ -6,7 +6,9 @@ require 'rails_helper'
 # pelo AiAgent::FollowUpOutputSanitizer antes de virar mensagem ao lead, para que
 # nenhum scaffold do prompt (ex.: "Sua tarefa:", "(Aguardando resposta...)") vaze
 # para o WhatsApp. Bug confirmado nas conversas 676 (Sol) e 644.
-RSpec.describe Kanban::ExecuteActionService, 'follow-up output sanitization (v66)' do
+RSpec.describe Kanban::ExecuteActionService do
+  subject(:service) { described_class.new(execution) }
+
   let(:account)      { create(:account) }
   let(:contact)      { create(:contact, account: account, phone_number: '+5551999502911', name: 'Sol') }
   let(:inbox)        { create(:inbox, account: account) }
@@ -35,7 +37,7 @@ RSpec.describe Kanban::ExecuteActionService, 'follow-up output sanitization (v66
       scheduled_at: Time.current, status: 'pending'
     )
   end
-  let!(:ai_agent) do
+  let(:ai_agent) do
     AiAgent.create!(
       account: account, name: 'Julia', company: 'Volponi e Oliveira', language: 'pt',
       active: true, llm_provider: 'gemini', llm_model: 'gemini-3.1-flash-lite',
@@ -43,36 +45,38 @@ RSpec.describe Kanban::ExecuteActionService, 'follow-up output sanitization (v66
     )
   end
 
-  subject(:service) { described_class.new(execution) }
+  before { ai_agent }
 
   def stub_llm(text)
     resp = AiAgent::LlmService::LlmResponse.new(type: :text, text: text, tool_calls: [], raw_parts: nil)
     allow(AiAgent::LlmService).to receive(:call).and_return(resp)
   end
 
-  it 'sanitiza o scaffold ecoado (string real da conv 676) antes de retornar' do
-    stub_llm("(Aguardando resposta da cliente)\n\n---\n*Sua tarefa: gerar o follow-up*\n\nOi, Sol! Está por aí?")
-    result = service.send(:generate_ai_message)
-    expect(result).to eq('Oi, Sol! Está por aí?')
-    expect(result).not_to match(/sua tarefa/i)
-    expect(result).not_to match(/aguardando/i)
-  end
+  describe '#generate_ai_message (v66 scaffold sanitizer)' do
+    it 'sanitiza o scaffold ecoado (string real da conv 676) antes de retornar' do
+      stub_llm("(Aguardando resposta da cliente)\n\n---\n*Sua tarefa: gerar o follow-up*\n\nOi, Sol! Está por aí?")
+      result = service.send(:generate_ai_message)
+      expect(result).to eq('Oi, Sol! Está por aí?')
+      expect(result).not_to match(/sua tarefa/i)
+      expect(result).not_to match(/aguardando/i)
+    end
 
-  it 'não altera uma mensagem já limpa do LLM (regressão)' do
-    clean = 'Oi, Sol! Passando para saber se você viu minha última mensagem.'
-    stub_llm(clean)
-    expect(service.send(:generate_ai_message)).to eq(clean)
-  end
+    it 'não altera uma mensagem já limpa do LLM (regressão)' do
+      clean = 'Oi, Sol! Passando para saber se você viu minha última mensagem.'
+      stub_llm(clean)
+      expect(service.send(:generate_ai_message)).to eq(clean)
+    end
 
-  it 'passa a saída crua do LLM pelo sanitizer' do
-    stub_llm('Oi, tudo certo?')
-    allow(AiAgent::FollowUpOutputSanitizer).to receive(:call).and_call_original
-    service.send(:generate_ai_message)
-    expect(AiAgent::FollowUpOutputSanitizer).to have_received(:call).with('Oi, tudo certo?')
-  end
+    it 'passa a saída crua do LLM pelo sanitizer' do
+      stub_llm('Oi, tudo certo?')
+      allow(AiAgent::FollowUpOutputSanitizer).to receive(:call).and_call_original
+      service.send(:generate_ai_message)
+      expect(AiAgent::FollowUpOutputSanitizer).to have_received(:call).with('Oi, tudo certo?')
+    end
 
-  it 'levanta erro se a resposta for puramente scaffold (vazia após sanitização)' do
-    stub_llm("## Sua tarefa:\n---")
-    expect { service.send(:generate_ai_message) }.to raise_error(RuntimeError, /vazia/)
+    it 'levanta erro se a resposta for puramente scaffold (vazia após sanitização)' do
+      stub_llm("## Sua tarefa:\n---")
+      expect { service.send(:generate_ai_message) }.to raise_error(RuntimeError, /vazia/)
+    end
   end
 end
