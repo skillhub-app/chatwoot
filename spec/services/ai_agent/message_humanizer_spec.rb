@@ -99,4 +99,68 @@ RSpec.describe AiAgent::MessageHumanizer do
       end
     end
   end
+
+  # Sprint v67 — resposta com URL força texto, mesmo em modo voz (TTS leria o link).
+  describe 'guard de URL (override do modo voz)' do
+    context 'last_was_audio=true + resposta COM URL' do
+      it 'envia TEXTO e NÃO chama TtsService (override)' do
+        expect(AiAgent::TtsService).not_to receive(:convert)
+
+        described_class.send_response(
+          conversation, 'Segue o link: https://meet.google.com/abc-defg-hij',
+          agent: tts_agent, last_was_audio: true
+        )
+
+        expect(conversation.messages.outgoing.last.content)
+          .to eq('Segue o link: https://meet.google.com/abc-defg-hij')
+      end
+    end
+
+    context 'last_was_audio=true + resposta SEM URL (regressão)' do
+      it 'continua enviando áudio via TtsService' do
+        allow(AiAgent::TtsService).to receive(:convert).and_return('mp3bytes')
+        expect(AiAgent::TtsService).to receive(:convert).once
+
+        described_class.send_response(
+          conversation, 'Claro, posso te ajudar com isso!',
+          agent: tts_agent, last_was_audio: true
+        )
+      end
+    end
+
+    context 'last_was_audio=false + resposta COM URL (regressão)' do
+      it 'envia texto normalmente' do
+        expect(AiAgent::TtsService).not_to receive(:convert)
+
+        described_class.send_response(
+          conversation, 'Acesse www.volponi.com.br',
+          agent: tts_agent, last_was_audio: false
+        )
+
+        expect(conversation.messages.outgoing.last.content).to eq('Acesse www.volponi.com.br')
+      end
+    end
+
+    context 'casos reais em modo voz' do
+      it 'Instagram bccprev => texto' do
+        expect(AiAgent::TtsService).not_to receive(:convert)
+        described_class.send_response(
+          conversation, 'Nosso Instagram: https://www.instagram.com/bccprev/',
+          agent: tts_agent, last_was_audio: true
+        )
+        expect(conversation.messages.outgoing.last.content)
+          .to eq('Nosso Instagram: https://www.instagram.com/bccprev/')
+      end
+
+      it 'contrato ZapSign => texto' do
+        expect(AiAgent::TtsService).not_to receive(:convert)
+        described_class.send_response(
+          conversation, 'Seu contrato: https://app.zapsign.com.br/doc/123',
+          agent: tts_agent, last_was_audio: true
+        )
+        expect(conversation.messages.outgoing.last.content)
+          .to eq('Seu contrato: https://app.zapsign.com.br/doc/123')
+      end
+    end
+  end
 end

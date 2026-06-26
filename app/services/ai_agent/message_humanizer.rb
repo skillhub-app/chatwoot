@@ -30,6 +30,8 @@ class AiAgent::MessageHumanizer
     return false unless @agent&.tts_enabled?
     return false unless @agent.tts_voice_id.present?
     return false unless @agent.tts_api_key_encrypted.present?
+    # v67: respostas com URL vão SEMPRE como texto (TTS leria o link literalmente).
+    return false if AiAgent::ContentInspector.contains_url?(@text)
 
     @last_was_audio
   end
