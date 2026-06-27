@@ -29,7 +29,7 @@ class ChannelUazapi::RevokeMessageService
     else
       { success: false, code: resp.status, error: "unexpected code #{resp.status}" }
     end
-  rescue Faraday::TimeoutError
+  rescue Faraday::TimeoutError, Timeout::Error
     { success: false, error: 'timeout' }
   rescue StandardError => e
     { success: false, error: e.message }
