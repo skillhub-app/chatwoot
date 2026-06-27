@@ -29,13 +29,17 @@ class ChannelUazapi::RevokeMessageService
     else
       { success: false, code: resp.status, error: "unexpected code #{resp.status}" }
     end
-  rescue Faraday::TimeoutError, Timeout::Error
-    { success: false, error: 'timeout' }
   rescue StandardError => e
-    { success: false, error: e.message }
+    { success: false, error: timeout_error?(e) ? 'timeout' : e.message }
   end
 
   private
+
+  def timeout_error?(error)
+    error.is_a?(Faraday::TimeoutError) ||
+      error.is_a?(Timeout::Error) ||
+      error.message.to_s.match?(/timed?\s?out|execution expired/i)
+  end
 
   def base_url
     @channel.api_base_url.to_s.chomp('/')
