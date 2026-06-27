@@ -119,6 +119,9 @@ class Message < ApplicationRecord
   scope :non_activity_messages, -> { where.not(message_type: :activity).reorder('created_at desc') }
   scope :today, -> { where("date_trunc('day', created_at) = ?", Date.current) }
   scope :voice_calls, -> { where(content_type: :voice_call) }
+  # v68 — soft delete (deleted_at preservado para auditoria; conteúdo NÃO é apagado)
+  scope :visible, -> { where(deleted_at: nil) }
+  scope :soft_deleted, -> { where.not(deleted_at: nil) }
 
   # TODO: Get rid of default scope
   # https://stackoverflow.com/a/1834250/939299
@@ -141,6 +144,11 @@ class Message < ApplicationRecord
 
   def channel_token
     @token ||= inbox.channel.try(:page_access_token)
+  end
+
+  # v68 — soft delete
+  def soft_deleted?
+    deleted_at.present?
   end
 
   def push_event_data
