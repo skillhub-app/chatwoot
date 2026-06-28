@@ -40,7 +40,22 @@ class AiAgent::MessageHumanizer
     audio_data = AiAgent::TtsService.convert(@agent, @text)
     return false unless audio_data
 
-    message = @conversation.messages.create!(
+    # v69: mensagem + anexo numa única transação. O after_create_commit (que
+    # enfileira o SendReplyJob) só dispara após o COMMIT final, com o áudio já
+    # persistido — eliminando a race que mandava text.body: nil ao Meta (HTTP 400).
+    ActiveRecord::Base.transaction do
+      message = create_audio_message!
+      attach_audio!(message, audio_data)
+    end
+
+    true
+  rescue StandardError => e
+    Rails.logger.error "[AiAgent] Audio send error: #{e.message}"
+    false
+  end
+
+  def create_audio_message!
+    @conversation.messages.create!(
       account:      @conversation.account,
       inbox:        @conversation.inbox,
       message_type: :outgoing,
@@ -49,8 +64,10 @@ class AiAgent::MessageHumanizer
       private:      false,
       sender:       @agent_user
     )
+  end
 
-    message.attachments.new(
+  def attach_audio!(message, audio_data)
+    message.attachments.create!(
       account_id: @conversation.account_id,
       file_type:  :audio,
       file: {
@@ -58,12 +75,7 @@ class AiAgent::MessageHumanizer
         filename:     'resposta.mp3',
         content_type: 'audio/mpeg'
       }
-    ).save!
-
-    true
-  rescue StandardError => e
-    Rails.logger.error "[AiAgent] Audio send error: #{e.message}"
-    false
+    )
   end
 
   def fallback_to_text
