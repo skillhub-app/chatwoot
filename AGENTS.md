@@ -15,6 +15,12 @@
 
 ---
 
+## ⚠️ Patches Fork-Specific (precisam sobreviver a updates do Chatwoot)
+
+- **Facebook Messenger `messaging_type`** — ver [`PATCH_MESSENGER.md`](PATCH_MESSENGER.md). O upstream envia com `MESSAGE_TAG`/`ACCOUNT_UPDATE` (tag descontinuada pela Meta → code 100/subcode 1893061, "Invalid parameter"). Patch em `app/services/facebook/send_on_facebook_service.rb`: dentro de 24h → `messaging_type: RESPONSE` sem tag; fora de 24h → descarta silenciosamente. Se um update do Chatwoot sobrescrever esse service, **reaplicar**.
+
+---
+
 ## Identidade do Projeto
 
 - **Nome**: Chatwoot-Volponi
