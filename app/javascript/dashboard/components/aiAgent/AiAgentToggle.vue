@@ -1,12 +1,23 @@
 <!-- eslint-disable vue/no-bare-strings-in-template -->
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import ConversationApi from 'dashboard/api/inbox/conversation';
 import { useAlert } from 'dashboard/composables';
 
 const props = defineProps({
   conversationId: { type: [Number, String], required: true },
 });
+
+// bug I: o toggle só carregava o estado uma vez, em onMounted. Quando o
+// backend pausa a IA sozinho (pause_ai_on_human_response, disparado pela
+// própria resposta do operador), a conversa já estava aberta — sem
+// WebSocket nem polling, o toggle ficava congelado mostrando "ligado" até o
+// operador trocar de conversa e voltar. O state real no backend estava
+// correto o tempo todo; só a UI ficava desatualizada. Poll leve enquanto o
+// painel está montado resolve sem depender de conhecer a fundo o pipeline
+// de realtime da conversa.
+const STATE_REFRESH_INTERVAL_MS = 15000;
+let stateRefreshTimer = null;
 
 const loading = ref(false);
 const aiConv = ref(null);
@@ -72,7 +83,9 @@ async function toggleAi(newValue) {
   try {
     await ConversationApi.updateAiAgentState(props.conversationId, state);
     await loadState();
-    useAlert(newValue ? 'IA ativada nesta conversa.' : 'IA desativada nesta conversa.');
+    useAlert(
+      newValue ? 'IA ativada nesta conversa.' : 'IA desativada nesta conversa.'
+    );
   } catch {
     // rollback: re-sincroniza a UI com o estado real do backend
     await loadState();
@@ -115,7 +128,34 @@ async function resetMemory() {
   }
 }
 
-onMounted(loadState);
+function stopStateRefreshTimer() {
+  if (stateRefreshTimer) {
+    clearInterval(stateRefreshTimer);
+    stateRefreshTimer = null;
+  }
+}
+
+function startStateRefreshTimer() {
+  stopStateRefreshTimer();
+  stateRefreshTimer = setInterval(loadState, STATE_REFRESH_INTERVAL_MS);
+}
+
+onMounted(() => {
+  loadState();
+  startStateRefreshTimer();
+});
+
+onUnmounted(stopStateRefreshTimer);
+
+// o painel reaproveita a instância ao trocar de conversa — sem isso o poll
+// continuaria batendo no ID antigo depois do operador trocar de conversa.
+watch(
+  () => props.conversationId,
+  () => {
+    loadState();
+    startStateRefreshTimer();
+  }
+);
 </script>
 
 <template>
