@@ -22,13 +22,6 @@ dashboard_apps:
   i18n_key: dashboard_apps
   hook_type: account
   allow_multiple_hooks: true
-llm_providers:
-  id: llm_providers
-  logo: llm_providers.png
-  i18n_key: llm_providers
-  action: /llm_providers
-  hook_type: account
-  allow_multiple_hooks: false
 openai:
   id: openai
   logo: openai.png

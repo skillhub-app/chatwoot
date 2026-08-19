@@ -119,9 +119,6 @@ class Message < ApplicationRecord
   scope :non_activity_messages, -> { where.not(message_type: :activity).reorder('created_at desc') }
   scope :today, -> { where("date_trunc('day', created_at) = ?", Date.current) }
   scope :voice_calls, -> { where(content_type: :voice_call) }
-  # v68 — soft delete (deleted_at preservado para auditoria; conteúdo NÃO é apagado)
-  scope :visible, -> { where(deleted_at: nil) }
-  scope :soft_deleted, -> { where.not(deleted_at: nil) }
 
   # TODO: Get rid of default scope
   # https://stackoverflow.com/a/1834250/939299
@@ -144,11 +141,6 @@ class Message < ApplicationRecord
 
   def channel_token
     @token ||= inbox.channel.try(:page_access_token)
-  end
-
-  # v68 — soft delete
-  def soft_deleted?
-    deleted_at.present?
   end
 
   def push_event_data
@@ -344,49 +336,14 @@ class Message < ApplicationRecord
 
   def pause_ai_on_human_response
     return unless human_response?
-    # If the inbox has an agent bot connected, outgoing messages are from the bot
-    # (even when sent via user token), so we must not disable the AI automatically.
-    return if conversation.inbox.agent_bot_inbox&.agent_bot.present?
+    return unless conversation.label_list.include?('ia_ligada')
 
-    agent             = ::AiAgent.find_by(inbox: conversation.inbox, active: true)
-    return unless agent
-
-    reactivation_cmd  = agent.reactivation_command.to_s.strip
-    has_reactivation  = reactivation_cmd.present? && content.to_s.include?(reactivation_cmd)
-    ai_conv           = AiAgentConversation.find_by(ai_agent: agent, conversation: conversation)
-
-    # Fonte de verdade = ai_agent_conversation.state. Sincronizamos state E labels
-    # juntos pra UI (toggle) e portões nunca dessincronizarem.
-    if has_reactivation
-      was_active = ai_conv&.state == 'active'
-      ai_conv ||= AiAgentConversation.create!(ai_agent: agent, conversation: conversation,
-                                              contact: conversation.contact, state: 'active')
-      ai_conv.resume!
-      sync_ai_state_labels('active')
-      AiAgent::ActivityService.ai_enabled(conversation, by: sender_name_for_activity) unless was_active
-    elsif ai_conv&.state == 'active'
-      ai_conv.pause!('manual')
-      sync_ai_state_labels('paused')
-      AiAgent::ActivityService.ai_auto_paused(conversation)
-    end
+    current_labels = conversation.label_list.to_a
+    current_labels.delete('ia_ligada')
+    current_labels |= ['ia_desligada']
+    conversation.update!(label_list: current_labels)
   rescue StandardError => e
     Rails.logger.error "pause_ai_on_human_response error: #{e.message}"
-  end
-
-  def sender_name_for_activity
-    sender.is_a?(User) ? sender.name : nil
-  end
-
-  def sync_ai_state_labels(state)
-    labels = conversation.label_list.to_a
-    if state == 'active'
-      labels.delete('ia_desligada')
-      labels |= ['ia_ligada']
-    else
-      labels.delete('ia_ligada')
-      labels |= ['ia_desligada']
-    end
-    conversation.update!(label_list: labels)
   end
 
   def update_contact_activity
@@ -420,12 +377,10 @@ class Message < ApplicationRecord
     # if the sender is not a user, it's not a human response
     # if automation rule id is present, it's not a human response
     # if campaign id is present, it's not a human response
-    # if kanban automation generated this message, it's not a human response
     # external echo messages are responses sent from the native app (WhatsApp Business, Instagram)
     outgoing? &&
       content_attributes['automation_rule_id'].blank? &&
       additional_attributes['campaign_id'].blank? &&
-      additional_attributes['automation_generated'].blank? &&
       (sender.is_a?(User) || content_attributes['external_echo'].present?)
   end
 

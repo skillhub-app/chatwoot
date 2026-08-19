@@ -6,19 +6,11 @@ class Api::V1::Accounts::Conversations::MessagesController < Api::V1::Accounts::
   end
 
   def create
-    begin
-      user = Current.user || @resource
-      mb = Messages::MessageBuilder.new(user, @conversation, params)
-      @message = mb.perform
-    rescue StandardError => e
-      Rails.logger.error "[MessagesController#create] caught: #{e.class.name}: #{e.message}"
-      Rails.logger.error e.backtrace.first(20).join("\n")
-      render_could_not_create_error(e.message)
-    end
+    user = Current.user || @resource
+    mb = Messages::MessageBuilder.new(user, @conversation, params)
+    @message = mb.perform
   rescue StandardError => e
-    Rails.logger.error "[MessagesController#create OUTER] caught: #{e.class.name}: #{e.message}"
-    Rails.logger.error e.backtrace.first(20).join("\n")
-    raise
+    render_could_not_create_error(e.message)
   end
 
   def update
@@ -27,22 +19,10 @@ class Api::V1::Accounts::Conversations::MessagesController < Api::V1::Accounts::
   end
 
   def destroy
-    # v68 — soft delete + revoke no WhatsApp (Uazapi). Só outgoing; conteúdo é
-    # preservado (auditoria), mensagem fica visível no painel com a tarja.
-    return render_cannot_delete_incoming unless message.outgoing?
-    return render_already_deleted if message.soft_deleted?
-
-    if uazapi_channel? && message.source_id.present?
-      result = ChannelUazapi::RevokeMessageService.new(message.inbox.channel, message.source_id).perform
-      return render_revoke_failed(result) unless result[:success]
-
-      mark_deleted!(for_recipient: true)
-    else
-      # Não-Uazapi, OU mensagem antiga sem source_id: soft delete apenas local.
-      mark_deleted!(for_recipient: false)
+    ActiveRecord::Base.transaction do
+      message.update!(content: I18n.t('conversations.messages.deleted'), content_type: :text, content_attributes: { deleted: true })
+      message.attachments.destroy_all
     end
-
-    @message = message
   end
 
   def retry
@@ -96,33 +76,5 @@ class Api::V1::Accounts::Conversations::MessagesController < Api::V1::Accounts::
   def ensure_api_inbox
     # Only API inboxes can update messages
     render json: { error: 'Message status update is only allowed for API inboxes' }, status: :forbidden unless @conversation.inbox.api?
-  end
-
-  # v68 — soft delete helpers
-  def uazapi_channel?
-    message.inbox.channel_type == 'Channel::Uazapi'
-  end
-
-  def mark_deleted!(for_recipient:)
-    now = Time.current
-    message.update!(
-      deleted_at: now,
-      deleted_for_recipient: for_recipient,
-      content_attributes: message.content_attributes.merge(
-        'deleted' => true, 'deleted_for_recipient' => for_recipient, 'deleted_at' => now.iso8601
-      )
-    )
-  end
-
-  def render_cannot_delete_incoming
-    render json: { error: I18n.t('conversations.messages.only_outgoing_deletable') }, status: :forbidden
-  end
-
-  def render_already_deleted
-    render json: { error: I18n.t('conversations.messages.already_deleted') }, status: :unprocessable_entity
-  end
-
-  def render_revoke_failed(result)
-    render json: { error: I18n.t('conversations.messages.revoke_failed'), detail: result[:error] }, status: :unprocessable_entity
   end
 end

@@ -107,50 +107,6 @@ RSpec.describe AutomationRule do
     end
   end
 
-  describe 'kanban cross-account validation' do
-    let(:account)       { create(:account) }
-    let(:other_account) { create(:account) }
-    let(:pipeline)      { KanbanPipeline.create!(account: account, name: 'P', position: 0, visibility_type: 'all') }
-    let(:stage)         { KanbanStage.create!(pipeline: pipeline, name: 'S', position: 0, probability: 0) }
-    let(:other_pipeline) { KanbanPipeline.create!(account: other_account, name: 'P2', position: 0, visibility_type: 'all') }
-    let(:other_stage)   { KanbanStage.create!(pipeline: other_pipeline, name: 'S2', position: 0, probability: 0) }
-
-    it 'accepts kanban_stage_id condition belonging to same account' do
-      rule = build(:automation_rule, account: account,
-                                     conditions: [{ 'attribute_key' => 'kanban_stage_id', 'filter_operator' => 'equal_to',
-                                                    'values' => [stage.id.to_s], 'query_operator' => nil }])
-      expect(rule).to be_valid
-    end
-
-    it 'rejects kanban_stage_id condition from another account' do
-      rule = build(:automation_rule, account: account,
-                                     conditions: [{ 'attribute_key' => 'kanban_stage_id', 'filter_operator' => 'equal_to',
-                                                    'values' => [other_stage.id.to_s], 'query_operator' => nil }])
-      expect(rule).not_to be_valid
-      expect(rule.errors[:conditions].first).to include('não pertence')
-    end
-
-    it 'rejects kanban_stage_id condition with non-existent id' do
-      rule = build(:automation_rule, account: account,
-                                     conditions: [{ 'attribute_key' => 'kanban_stage_id', 'filter_operator' => 'equal_to',
-                                                    'values' => ['999999'], 'query_operator' => nil }])
-      expect(rule).not_to be_valid
-      expect(rule.errors[:conditions].first).to include('não encontrada')
-    end
-
-    it 'accepts move_kanban_stage action with stage from same account' do
-      rule = build(:automation_rule, account: account,
-                                     actions: [{ 'action_name' => 'move_kanban_stage', 'action_params' => [stage.id] }])
-      expect(rule).to be_valid
-    end
-
-    it 'rejects move_kanban_stage action with stage from another account' do
-      rule = build(:automation_rule, account: account,
-                                     actions: [{ 'action_name' => 'move_kanban_stage', 'action_params' => [other_stage.id] }])
-      expect(rule).not_to be_valid
-    end
-  end
-
   describe 'reauthorizable' do
     context 'when prompt_reauthorization!' do
       it 'marks the rule inactive' do

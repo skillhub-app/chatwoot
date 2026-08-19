@@ -355,25 +355,6 @@ const isMessageDeleted = computed(() => {
   return props.contentAttributes?.deleted;
 });
 
-// v68 — tarja de mensagem apagada
-const deletedForRecipient = computed(() => {
-  return !!props.contentAttributes?.deleted_for_recipient;
-});
-
-const deletedBadgeLabel = computed(() => {
-  return deletedForRecipient.value
-    ? t('CONVERSATION.MESSAGE_DELETED_FOR_RECIPIENT')
-    : t('CONVERSATION.MESSAGE_DELETED_PANEL_ONLY');
-});
-
-const deletedTooltip = computed(() => {
-  const ts = props.contentAttributes?.deleted_at;
-  if (!ts) return '';
-  return t('CONVERSATION.MESSAGE_DELETED_AT', {
-    time: new Date(ts).toLocaleString(),
-  });
-});
-
 const payloadForContextMenu = computed(() => {
   return {
     id: props.id,
@@ -395,7 +376,6 @@ const contextMenuEnabledOptions = computed(() => {
   return {
     copy: hasText,
     delete:
-      isOutgoing &&
       (hasText || hasAttachments) &&
       !isFailedOrProcessing &&
       !isMessageDeleted.value,
@@ -578,19 +558,10 @@ provideMessageContext({
           'ltr:ml-8 rtl:mr-8 justify-end': orientation === ORIENTATION.RIGHT,
           'ltr:mr-8 rtl:ml-8': orientation === ORIENTATION.LEFT,
           'min-w-0': variant === MESSAGE_VARIANTS.EMAIL,
-          'opacity-50': isMessageDeleted,
         }"
         @contextmenu="openContextMenu($event)"
       >
         <Component :is="componentToRender" />
-      </div>
-      <div
-        v-if="isMessageDeleted"
-        v-tooltip="deletedTooltip"
-        class="[grid-area:meta] text-xs italic text-n-slate-10"
-        :class="flexOrientationClass"
-      >
-        {{ deletedBadgeLabel }}
       </div>
       <MessageError
         v-if="contentAttributes.externalError"

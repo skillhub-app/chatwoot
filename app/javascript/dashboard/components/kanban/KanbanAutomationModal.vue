@@ -73,20 +73,6 @@ const blankActionForm = () => ({
 
 const actionForm = ref(blankActionForm());
 
-const AI_COMMAND_VERBS = ['analise', 'gere', 'pergunte', 'verifique', 'identifique',
-  'crie', 'faça', 'resuma', 'responda', 'escreva', 'retome', 'entenda', 'reflita'];
-const AI_COMMAND_PREFIXES = ['com base', 'considerando', 'a partir d'];
-
-const detectedMode = computed(() => {
-  const override = actionForm.value.config?.ai_mode_override;
-  if (override) return override;
-  const prompt = (actionForm.value.config?.ai_prompt || '').trim().toLowerCase();
-  if (!prompt) return null;
-  if (AI_COMMAND_VERBS.some(v => prompt.startsWith(v))) return 'comando';
-  if (AI_COMMAND_PREFIXES.some(p => prompt.startsWith(p))) return 'comando';
-  return 'exemplo';
-});
-
 // ─── Data loading ────────────────────────────────────────────────────────────
 
 async function loadStages() {
@@ -714,7 +700,7 @@ function openStopConditions(stageId) {
                 v-model="actionForm.config.inbox_id"
                 class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
               >
-                <option :value="undefined">Mesma do lead</option>
+                <option :value="undefined">Qualquer canal disponível</option>
                 <option
                   v-for="inbox in inboxes"
                   :key="inbox.id"
@@ -740,7 +726,7 @@ function openStopConditions(stageId) {
 
               <div v-if="actionForm.config.use_ai">
                 <label class="text-xs text-slate-500 mb-1 block"
-                  >Rascunho / intenção (opcional)</label
+                  >Instrução para IA</label
                 >
                 <textarea
                   v-model="actionForm.config.ai_prompt"
@@ -748,53 +734,6 @@ function openStopConditions(stageId) {
                   placeholder="Ex: Faça um follow-up gentil sobre a proposta enviada"
                   class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30 resize-none"
                 />
-                <div class="flex items-center gap-2 mt-1.5">
-                  <span class="text-[10px] text-slate-400">Tipo:</span>
-                  <div class="flex gap-1">
-                    <button
-                      type="button"
-                      class="text-[10px] px-2 py-0.5 rounded border transition-colors"
-                      :class="
-                        !actionForm.config.ai_mode_override
-                          ? 'bg-violet-600 text-white border-violet-600'
-                          : 'border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
-                      "
-                      @click="actionForm.config.ai_mode_override = null"
-                    >
-                      Auto
-                    </button>
-                    <button
-                      type="button"
-                      class="text-[10px] px-2 py-0.5 rounded border transition-colors"
-                      :class="
-                        actionForm.config.ai_mode_override === 'template'
-                          ? 'bg-violet-600 text-white border-violet-600'
-                          : 'border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
-                      "
-                      @click="actionForm.config.ai_mode_override = 'template'"
-                    >
-                      Exemplo
-                    </button>
-                    <button
-                      type="button"
-                      class="text-[10px] px-2 py-0.5 rounded border transition-colors"
-                      :class="
-                        actionForm.config.ai_mode_override === 'command'
-                          ? 'bg-violet-600 text-white border-violet-600'
-                          : 'border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
-                      "
-                      @click="actionForm.config.ai_mode_override = 'command'"
-                    >
-                      Comando
-                    </button>
-                  </div>
-                  <span v-if="detectedMode" class="text-[10px] text-slate-400">
-                    Detectado:
-                    <strong class="text-slate-600 dark:text-slate-300">{{
-                      detectedMode
-                    }}</strong>
-                  </span>
-                </div>
               </div>
               <div v-else>
                 <label class="text-xs text-slate-500 mb-1 block"

@@ -7,19 +7,19 @@ class AiAgent::GoogleCalendar::ApiClient
   end
 
   def freebusy(calendar_id, time_min, time_max)
-    post('freeBusy', {
+    post('/freeBusy', {
            timeMin: time_min.iso8601,
            timeMax: time_max.iso8601,
            items:   [{ id: calendar_id }]
          })
   end
 
-  def create_event(calendar_id, event_body, query = {})
-    post("calendars/#{CGI.escape(calendar_id)}/events", event_body, query)
+  def create_event(calendar_id, event_body)
+    post("/calendars/#{CGI.escape(calendar_id)}/events", event_body)
   end
 
   def list_events(calendar_id, time_min, time_max)
-    get("calendars/#{CGI.escape(calendar_id)}/events", {
+    get("/calendars/#{CGI.escape(calendar_id)}/events", {
           timeMin:      time_min.iso8601,
           timeMax:      time_max.iso8601,
           singleEvents: true,
@@ -27,43 +27,14 @@ class AiAgent::GoogleCalendar::ApiClient
         })
   end
 
-  def calendar_list(max_results: 100)
-    get('users/me/calendarList', { maxResults: max_results })
-  end
-
-  # Lista eventos filtrados por extendedProperties.private.<key> = <value>, via o
-  # parâmetro privateExtendedProperty da API do Google (filtro server-side). Usado
-  # pra achar APENAS eventos criados pela IA pra um lead específico — nunca varre
-  # a agenda inteira nem expõe eventos de terceiros.
-  def list_events_by_private_property(calendar_id, key, value, time_min: nil)
-    get("calendars/#{CGI.escape(calendar_id)}/events", {
-          privateExtendedProperty: "#{key}=#{value}",
-          singleEvents:            true,
-          orderBy:                 'startTime',
-          maxResults:              250,
-          timeMin:                 time_min&.iso8601
-        }.compact)
-  end
-
-  def delete_event(calendar_id, event_id)
-    delete("calendars/#{CGI.escape(calendar_id)}/events/#{CGI.escape(event_id)}")
-  end
-
   private
 
   def ensure_valid_token!
     return unless @schedule.token_expired?
 
-    token_data = begin
-      AiAgent::GoogleCalendar::AuthService.refresh_token(
-        @schedule.google_refresh_token_encrypted
-      )
-    rescue StandardError => e
-      if e.message.include?('invalid_grant')
-        AiAgent::GoogleCalendar::InvalidGrantMonitor.track!(@schedule.ai_agent)
-      end
-      raise
-    end
+    token_data = AiAgent::GoogleCalendar::AuthService.refresh_token(
+      @schedule.google_refresh_token_encrypted
+    )
     @schedule.update_columns(
       google_access_token_encrypted: token_data['access_token'],
       google_token_expires_at:       Time.current + token_data['expires_in'].to_i.seconds
@@ -92,22 +63,11 @@ class AiAgent::GoogleCalendar::ApiClient
     response.body
   end
 
-  def post(path, body, query = {})
+  def post(path, body)
     response = conn.post(path) do |req|
       req.headers['Authorization'] = "Bearer #{access_token}"
-      req.params = query if query.present?
       req.body = body
     end
-    raise "Google Calendar API error: #{response.body}" unless response.success?
-
-    response.body
-  end
-
-  def delete(path)
-    response = conn.delete(path) do |req|
-      req.headers['Authorization'] = "Bearer #{access_token}"
-    end
-    # DELETE de evento no Google retorna 204 No Content (sem body) em sucesso.
     raise "Google Calendar API error: #{response.body}" unless response.success?
 
     response.body

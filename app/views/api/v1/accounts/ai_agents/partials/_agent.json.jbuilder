@@ -4,9 +4,8 @@ json.company               agent.company
 json.language              agent.language
 json.timezone              agent.timezone
 json.active                agent.active
-json.message_buffer_seconds  agent.message_buffer_seconds
-json.memory_window_messages  agent.memory_window_messages
-json.reactivation_command    agent.reactivation_command
+json.message_buffer_seconds agent.message_buffer_seconds
+json.reactivation_command  agent.reactivation_command
 json.message_chunk_size    agent.message_chunk_size
 json.llm_provider          agent.llm_provider
 json.llm_model             agent.llm_model

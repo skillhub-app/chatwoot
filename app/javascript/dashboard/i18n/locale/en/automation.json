@@ -99,9 +99,7 @@
       "TEAM_MESSAGE_INPUT_PLACEHOLDER": "Enter your message here",
       "TEAM_DROPDOWN_PLACEHOLDER": "Select teams",
       "EMAIL_INPUT_PLACEHOLDER": "Enter email",
-      "URL_INPUT_PLACEHOLDER": "Enter URL",
-      "KANBAN_PIPELINE_PLACEHOLDER": "Select pipeline",
-      "KANBAN_STAGE_PLACEHOLDER": "Select stage"
+      "URL_INPUT_PLACEHOLDER": "Enter URL"
     },
     "TOGGLE": {
       "ACTIVATION_TITLE": "Activate Automation Rule",
@@ -138,8 +136,7 @@
       "CONVERSATION_UPDATED": "Conversation Updated",
       "MESSAGE_CREATED": "Message Created",
       "CONVERSATION_RESOLVED": "Conversation Resolved",
-      "CONVERSATION_OPENED": "Conversation Opened",
-      "AI_STATUS_CHANGED": "AI Enabled / Disabled"
+      "CONVERSATION_OPENED": "Conversation Opened"
     },
     "ACTIONS": {
       "ASSIGN_AGENT": "Assign to Agent",
@@ -160,8 +157,7 @@
       "CHANGE_PRIORITY": "Change Priority",
       "ADD_SLA": "Add SLA",
       "OPEN_CONVERSATION": "Open conversation",
-      "PENDING_CONVERSATION": "Mark conversation as pending",
-      "MOVE_KANBAN_STAGE": "Move card to stage"
+      "PENDING_CONVERSATION": "Mark conversation as pending"
     },
     "MESSAGE_TYPES": {
       "INCOMING": "Incoming Message",
@@ -190,8 +186,6 @@
       "ASSIGNEE_NAME": "Assignee",
       "TEAM_NAME": "Team",
       "PRIORITY": "Priority",
-      "KANBAN_PIPELINE": "Current Pipeline",
-      "KANBAN_STAGE": "Current Stage",
       "LABELS": "Labels"
     }
   }

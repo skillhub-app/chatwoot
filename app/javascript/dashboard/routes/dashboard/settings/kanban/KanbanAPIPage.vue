@@ -253,25 +253,6 @@ const ENDPOINTS = {
       summary: 'Excluir lead',
       response: 'HTTP 200 OK',
     },
-    {
-      method: 'POST',
-      path: '/kanban/items/:id/notes',
-      summary: 'Adicionar nota a um lead (API externa)',
-      description:
-        'Endpoint para sistemas externos (n8n, Make, webhooks). Não requer pipeline_id — use o ID do lead diretamente. O campo author_name é registrado nos metadados da atividade para rastreabilidade.',
-      body: `{
-  "content": "Follow-up realizado com sucesso pelo sistema externo",
-  "author_name": "n8n Bot"
-}`,
-      response: `{
-  "id": 1,
-  "kanban_item_id": 42,
-  "content": "Follow-up realizado com sucesso pelo sistema externo",
-  "author": { "id": 5, "name": "João Silva" },
-  "author_name_external": "n8n Bot",
-  "created_at": 1746900000
-}`,
-    },
   ],
   tasks: [
     {

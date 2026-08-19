@@ -12,7 +12,6 @@ export const INBOX_TYPES = {
   INSTAGRAM: 'Channel::Instagram',
   TIKTOK: 'Channel::Tiktok',
   VOICE: 'Channel::Voice',
-  UAZAPI: 'Channel::Uazapi',
 };
 
 export const TWILIO_CHANNEL_MEDIUM = {
