@@ -112,6 +112,12 @@ class Kanban::ExecuteActionService
 
     content = @config['use_ai'] ? generate_ai_message : interpolate_vars(@config['message'].to_s)
 
+    if content.nil?
+      @execution.update!(status: 'skipped', executed_at: Time.current, result: { error: 'llm_empty_response' })
+      return log_activity('automation_skipped', reason: 'llm_empty_response',
+                          description: 'Follow-up cancelado: IA sem resposta após tentativas')
+    end
+
     msg_params = {
       content: content,
       private: false,
@@ -262,26 +268,50 @@ class Kanban::ExecuteActionService
       - Retorne APENAS o texto da mensagem, sem prefixos tipo "Mensagem:" ou "Resposta:"
     PROMPT
 
-    response = AiAgent::LlmService.call(agent, { system: system_prompt, messages: messages_history }, tools: [])
-
-    if response.text.blank?
-      Rails.logger.error "[FollowUpAI] LLM retornou mensagem vazia para item #{@item.id}"
-      raise "LLM retornou mensagem vazia"
-    end
-
-    # v66 (Fix A): blindagem contra vazamento de scaffold do prompt (o Gemini Flash
-    # Lite ocasionalmente ecoa "Sua tarefa:", "(Aguardando resposta...)", "##", "---").
-    # Nunca enviar essas meta-instruções ao WhatsApp do lead.
-    text = AiAgent::FollowUpOutputSanitizer.call(response.text)
+    text = fetch_followup_text(agent, system_prompt, messages_history)
 
     if text.blank?
-      Rails.logger.error "[FollowUpAI] resposta ficou vazia após sanitização para item #{@item.id}"
-      raise "LLM retornou mensagem vazia"
+      static_fallback = @config['static_fallback'].to_s.strip
+      if static_fallback.present?
+        Rails.logger.warn "[FollowUpAI] LLM sem resposta após retries — usando static_fallback para item #{@item.id}"
+        return static_fallback.first(4000)
+      end
+
+      Rails.logger.error "[FollowUpAI] LLM sem resposta após retries e sem static_fallback configurado — pulando item #{@item.id}"
+      return nil
     end
 
     text = text.first(4000)
     Rails.logger.info "[FollowUpAI] Gerada mensagem de #{text.length} chars para item #{@item.id}"
     text
+  end
+
+  # bug H: LLM (Gemini Flash Lite, sobretudo) ocasionalmente retorna vazio de
+  # forma transitória. Em vez de `raise` (que deixava o Sidekiq retentar 25x
+  # por ~3 semanas, atrasando o follow-up de forma imprevisível e silenciosa),
+  # tenta algumas vezes com um pequeno backoff e desiste de forma controlada.
+  FOLLOWUP_RETRY_DELAYS = [0, 2, 5].freeze
+
+  def fetch_followup_text(agent, system_prompt, messages_history)
+    FOLLOWUP_RETRY_DELAYS.each_with_index do |delay, idx|
+      sleep_before_retry(delay) if idx.positive?
+
+      response = AiAgent::LlmService.call(agent, { system: system_prompt, messages: messages_history }, tools: [])
+
+      # v66 (Fix A): blindagem contra vazamento de scaffold do prompt (o Gemini
+      # Flash Lite ocasionalmente ecoa "Sua tarefa:", "(Aguardando resposta...)",
+      # "##", "---"). Nunca enviar essas meta-instruções ao WhatsApp do lead.
+      text = AiAgent::FollowUpOutputSanitizer.call(response.text.to_s)
+      return text if text.present?
+
+      Rails.logger.error "[FollowUpAI] LLM retornou mensagem vazia (tentativa #{idx + 1}/#{FOLLOWUP_RETRY_DELAYS.size}) para item #{@item.id}"
+    end
+
+    nil
+  end
+
+  def sleep_before_retry(seconds)
+    sleep(seconds)
   end
 
   def build_followup_history(conversation)

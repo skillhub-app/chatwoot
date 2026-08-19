@@ -159,15 +159,34 @@ RSpec.describe Kanban::ExecuteActionService do
         end
       end
 
-      context 'quando LLM retorna texto vazio' do
+      context 'quando LLM retorna texto vazio (bug H)' do
         let(:empty_response) do
           AiAgent::LlmService::LlmResponse.new(type: :text, text: '', tool_calls: [], raw_parts: nil)
         end
 
-        it 'raise com mensagem descritiva' do
+        before { allow(service).to receive(:sleep_before_retry) }
+
+        it 'tenta 3 vezes (1 original + 2 retries) antes de desistir' do
           allow(AiAgent::LlmService).to receive(:call).and_return(empty_response)
-          expect { service.send(:generate_ai_message) }
-            .to raise_error(RuntimeError, /mensagem vazia/)
+          service.send(:generate_ai_message)
+          expect(AiAgent::LlmService).to have_received(:call).exactly(3).times
+        end
+
+        it 'sem static_fallback configurado, retorna nil (não faz mais raise)' do
+          allow(AiAgent::LlmService).to receive(:call).and_return(empty_response)
+          expect(service.send(:generate_ai_message)).to be_nil
+        end
+
+        it 'com static_fallback configurado, retorna a mensagem estática' do
+          action.update!(config: action.config.merge('static_fallback' => 'Mensagem padrão de fallback'))
+          allow(AiAgent::LlmService).to receive(:call).and_return(empty_response)
+          expect(service.send(:generate_ai_message)).to eq('Mensagem padrão de fallback')
+        end
+
+        it 'se a 3ª tentativa vier preenchida, usa o texto dessa tentativa' do
+          filled_response = AiAgent::LlmService::LlmResponse.new(type: :text, text: 'Oi, tudo bem?', tool_calls: [], raw_parts: nil)
+          allow(AiAgent::LlmService).to receive(:call).and_return(empty_response, empty_response, filled_response)
+          expect(service.send(:generate_ai_message)).to eq('Oi, tudo bem?')
         end
       end
 
@@ -213,6 +232,24 @@ RSpec.describe Kanban::ExecuteActionService do
       travel_to Time.utc(2026, 6, 29, 2, 0) do
         expect(service.send(:inside_business_hours?)).to be false
       end
+    end
+  end
+
+  describe '#execute_send_whatsapp quando generate_ai_message retorna nil (bug H)' do
+    before { ai_agent }
+
+    it 'marca a execution como skipped (não failed) e registra activity, sem enviar mensagem' do
+      service = build_service
+      allow(service).to receive(:generate_ai_message).and_return(nil)
+      expect(Messages::MessageBuilder).not_to receive(:new)
+
+      service.perform
+
+      execution.reload
+      expect(execution.status).to eq('skipped')
+      expect(execution.result['error']).to eq('llm_empty_response')
+      expect(item.kanban_activities.last.action_type).to eq('automation_skipped')
+      expect(item.kanban_activities.last.metadata['reason']).to eq('llm_empty_response')
     end
   end
 
