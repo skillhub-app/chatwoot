@@ -98,9 +98,8 @@ async function ensureAutomation(stage) {
       stop_on_reply: false,
       stop_on_stage_change: true,
       stop_on_human_takeover: false,
-      stop_on_ai_disabled: false,
     });
-    auto = res.data.payload;
+    auto = res.data;
     automations.value.push(auto);
   }
   return auto;
@@ -118,13 +117,11 @@ function openStopConditions(stageId) {
         stop_on_reply: auto.stop_on_reply,
         stop_on_stage_change: auto.stop_on_stage_change,
         stop_on_human_takeover: auto.stop_on_human_takeover,
-        stop_on_ai_disabled: auto.stop_on_ai_disabled,
       }
     : {
         stop_on_reply: false,
         stop_on_stage_change: true,
         stop_on_human_takeover: false,
-        stop_on_ai_disabled: false,
       };
   stopConditionsStageId.value = stageId;
 }
@@ -631,16 +628,6 @@ async function toggleActive(stage, action) {
                         >Agente assumir</span
                       >
                     </label>
-                    <label class="flex items-center gap-2 cursor-pointer">
-                      <input
-                        v-model="stopConditionsTemp.stop_on_ai_disabled"
-                        type="checkbox"
-                        class="rounded border-slate-300 text-violet-600"
-                      />
-                      <span class="text-xs text-slate-600 dark:text-slate-300"
-                        >IA desligada</span
-                      >
-                    </label>
                   </div>
                   <div class="flex gap-2 mt-3">
                     <button
@@ -833,7 +820,7 @@ async function toggleActive(stage, action) {
                 v-model="actionForm.config.inbox_id"
                 class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
               >
-                <option :value="undefined">Mesma do lead</option>
+                <option :value="undefined">Qualquer canal disponível</option>
                 <option
                   v-for="inbox in inboxes"
                   :key="inbox.id"
@@ -842,44 +829,6 @@ async function toggleActive(stage, action) {
                   {{ inbox.name }}
                 </option>
               </select>
-            </div>
-            <div>
-              <label class="text-xs font-medium text-slate-500 mb-1.5 block"
-                >Enviar como</label
-              >
-              <select
-                v-model="actionForm.config.sender_type"
-                class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
-              >
-                <option value="system">Sistema (sem remetente)</option>
-                <option value="lead_owner">Responsável atual do lead</option>
-                <option value="specific_user">Usuário específico</option>
-              </select>
-            </div>
-            <div v-if="actionForm.config.sender_type === 'specific_user'">
-              <label class="text-xs font-medium text-slate-500 mb-1.5 block"
-                >Usuário remetente</label
-              >
-              <select
-                v-model="actionForm.config.sender_user_id"
-                class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
-              >
-                <option :value="undefined">Selecione um agente...</option>
-                <option v-for="a in agents" :key="a.id" :value="a.id">
-                  {{ a.name }}
-                </option>
-              </select>
-              <p class="text-xs text-slate-400 mt-1">
-                A mensagem aparece como enviada por este agente
-              </p>
-            </div>
-            <div
-              v-if="actionForm.config.sender_type === 'lead_owner'"
-              class="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-2"
-            >
-              <p class="text-xs text-amber-700 dark:text-amber-300">
-                Se o lead não tiver responsável, a mensagem será ignorada.
-              </p>
             </div>
             <div>
               <label class="flex items-center gap-2 cursor-pointer mb-2">

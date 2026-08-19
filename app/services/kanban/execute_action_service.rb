@@ -1,14 +1,10 @@
 class Kanban::ExecuteActionService
-  MESSAGING_CHANNELS = %w[Channel::Whatsapp Channel::Uazapi].freeze
-
   def initialize(execution)
-    @execution       = execution
-    @action          = execution.kanban_automation_action
-    @automation      = @action.kanban_automation
-    @item            = execution.kanban_item
-    @config          = @action.config.with_indifferent_access
-    @skip_reason     = nil
-    @skip_description = nil
+    @execution  = execution
+    @action     = execution.kanban_automation_action
+    @automation = @action.kanban_automation
+    @item       = execution.kanban_item
+    @config     = @action.config.with_indifferent_access
   end
 
   def perform
@@ -16,17 +12,12 @@ class Kanban::ExecuteActionService
 
     unless should_execute?
       @execution.update!(status: 'skipped', executed_at: Time.current)
-      log_activity('automation_skipped', reason: skip_reason, description: @skip_description)
+      log_activity('automation_skipped', reason: skip_reason)
       return
     end
 
     send("execute_#{@action.action_type}")
-    # bug H (achado pelo próprio spec novo): execute_send_whatsapp já marca a
-    # execution como 'skipped' internamente em alguns caminhos (sem conversa,
-    # fora do horário comercial, sender não encontrado, LLM sem resposta) e
-    # dá `return` — sem esse guard, essa linha sobrescrevia 'skipped' com
-    # 'completed' incondicionalmente.
-    @execution.update!(status: 'completed', executed_at: Time.current) if @execution.status == 'running'
+    @execution.update!(status: 'completed', executed_at: Time.current)
   rescue StandardError => e
     @execution.update!(status: 'failed', error_message: e.message, executed_at: Time.current)
     log_activity('automation_failed', error: e.message)
@@ -38,9 +29,10 @@ class Kanban::ExecuteActionService
   def should_execute?
     @item.reload
 
+    @skip_reason = nil
+
     if @automation.stop_on_stage_change && @item.stage_id != @automation.trigger_stage_id
-      @skip_reason     = 'lead_left_stage'
-      @skip_description = 'Card saiu da etapa antes da execução'
+      @skip_reason = 'lead_left_stage'
       return false
     end
 
@@ -52,8 +44,7 @@ class Kanban::ExecuteActionService
                                 .where('created_at > ?', @execution.scheduled_at)
                                 .exists?
         if has_reply
-          @skip_reason     = 'lead_replied'
-          @skip_description = 'Lead respondeu após o agendamento'
+          @skip_reason = 'lead_replied'
           return false
         end
       end
@@ -62,18 +53,7 @@ class Kanban::ExecuteActionService
     if @automation.stop_on_human_takeover && @item.conversation_id.present?
       conversation = Conversation.find_by(id: @item.conversation_id)
       if conversation&.assignee_id.present?
-        @skip_reason     = 'human_takeover'
-        @skip_description = 'Humano assumiu a conversa'
-        return false
-      end
-    end
-
-    if @automation.stop_on_ai_disabled
-      conversation = Conversation.find_by(id: @item.conversation_id)
-      ai_disabled = conversation&.cached_label_list_array&.include?('ia_desligada')
-      if ai_disabled
-        @skip_reason     = 'ai_disabled'
-        @skip_description = 'IA desligada (label ia_desligada ativa na conversa)'
+        @skip_reason = 'human_takeover'
         return false
       end
     end
@@ -85,85 +65,37 @@ class Kanban::ExecuteActionService
     @skip_reason || 'unknown'
   end
 
-  # ── WhatsApp / UAZAPI ───────────────────────────────────────────────────────
+  # ── WhatsApp ────────────────────────────────────────────────────────────────
 
   def execute_send_whatsapp
-    conversation = find_conversation_for_message
+    conversation = Conversation.find_by(id: @item.conversation_id)
     unless conversation
       @execution.update!(result: { error: 'no_conversation' })
-      return log_activity('automation_skipped', reason: 'no_conversation_linked',
-                          description: 'Sem conversa ativa vinculada ao card')
+      return log_activity('automation_skipped', reason: 'no_conversation_linked')
     end
 
     target_inbox_id = @config['inbox_id'].present? ? @config['inbox_id'].to_i : nil
 
+    # If a different inbox is configured and new-conversation mode is enabled
     if target_inbox_id && target_inbox_id != conversation.inbox_id && @config['open_new_conversation']
       conversation = open_conversation_in_inbox(target_inbox_id, conversation)
       return unless conversation
     end
 
-    unless inside_business_hours?
+    unless conversation.inbox.channel_type == 'Channel::Whatsapp'
+      @execution.update!(result: { error: 'not_whatsapp_channel' })
+      return log_activity('automation_skipped', reason: 'not_whatsapp_channel')
+    end
+
+    if inside_business_hours?
+      content = @config['use_ai'] ? generate_ai_message : @config['message']
+      message = Messages::MessageBuilder.new(nil, conversation, { content: content, private: false }).perform
+      log_activity('automation_message_sent', message_id: message.id, content: content)
+      @execution.update!(result: { message_id: message.id })
+    else
       @execution.update!(status: 'skipped', executed_at: Time.current, result: { error: 'outside_business_hours' })
-      return log_activity('automation_skipped', reason: 'outside_business_hours',
-                          description: 'Fora do horário comercial configurado')
+      log_activity('automation_skipped', reason: 'outside_business_hours')
     end
-
-    sender_user = resolve_sender_user(conversation)
-    if @config['sender_type'].present? && @config['sender_type'] != 'system' && sender_user.nil?
-      @execution.update!(result: { error: 'sender_not_found' })
-      return log_activity('automation_skipped', reason: 'sender_not_found',
-                          description: 'Usuário remetente não encontrado ou lead sem responsável')
-    end
-
-    content = @config['use_ai'] ? generate_ai_message : interpolate_vars(@config['message'].to_s)
-
-    if content.nil?
-      @execution.update!(status: 'skipped', executed_at: Time.current, result: { error: 'llm_empty_response' })
-      return log_activity('automation_skipped', reason: 'llm_empty_response',
-                          description: 'Follow-up cancelado: IA sem resposta após tentativas')
-    end
-
-    msg_params = {
-      content: content,
-      private: false,
-      additional_attributes: {
-        automation_generated:  true,
-        kanban_automation_id:  @automation.id,
-        kanban_action_id:      @action.id,
-        kanban_item_id:        @item.id
-      }
-    }
-
-    message = Messages::MessageBuilder.new(sender_user, conversation, msg_params).perform
-
-    sender_label = sender_user ? "#{sender_user.name} (id:#{sender_user.id})" : 'sistema'
-    log_activity('automation_message_sent',
-                 message_id:      message.id,
-                 conversation_id: conversation.id,
-                 sender:          sender_label,
-                 description:     "Follow-up enviado por #{sender_label} na conversa ##{conversation.id}: #{content.to_s.first(80)}")
-    @execution.update!(result: { message_id: message.id, conversation_id: conversation.id, sender: sender_label })
-  end
-
-  def find_conversation_for_message
-    return Conversation.find_by(id: @item.conversation_id) if @item.conversation_id.present?
-
-    open_convs = Conversation.where(account_id: @item.account_id, status: :open).order(updated_at: :desc)
-
-    if @item.contact_id.present?
-      conv = open_convs.find_by(contact_id: @item.contact_id)
-      return conv if conv
-    end
-
-    if @item.contact_phone.present?
-      digits = @item.contact_phone.gsub(/\D/, '')
-      contact = Contact.where(account_id: @item.account_id)
-                       .where('phone_number LIKE ?', "%#{digits}%")
-                       .first
-      return open_convs.find_by(contact_id: contact.id) if contact
-    end
-
-    nil
   end
 
   def open_conversation_in_inbox(inbox_id, existing_conversation)
@@ -203,136 +135,17 @@ class Kanban::ExecuteActionService
   end
 
   def inside_business_hours?
-    start_str = @config['business_hours_start'].presence
-    end_str   = @config['business_hours_end'].presence
+    window = @config['window']
+    return true unless window.present?
 
-    # Legacy window format: { start_hour: 9, end_hour: 18 }
-    if start_str.blank? && @config['window'].present?
-      w = @config['window']
-      start_str = w['start_hour'].to_s.rjust(2, '0') + ':00'
-      end_str   = w['end_hour'].to_s.rjust(2, '0') + ':00'
-    end
-
-    return true unless start_str.present? && end_str.present?
-
-    # bug D: Time.current.in_time_zone (sem argumento) usa Time.zone, que aqui é
-    # UTC — os configs de horário comercial são pensados em BRT.
-    current = Time.current.in_time_zone('America/Sao_Paulo').strftime('%H:%M')
-    current >= start_str && current <= end_str
-  end
-
-  def resolve_sender_user(conversation)
-    case @config['sender_type'].to_s
-    when 'specific_user'
-      uid = @config['sender_user_id'].to_i
-      uid.positive? ? User.find_by(id: uid) : nil
-    when 'lead_owner'
-      @item.assignee
-    when 'automation_default'
-      uid = @config['default_sender_user_id'].to_i
-      uid.positive? ? User.find_by(id: uid) : nil
-    else
-      nil
-    end
+    hour = Time.current.in_time_zone.hour
+    hour >= window['start_hour'].to_i && hour <= window['end_hour'].to_i
   end
 
   def generate_ai_message
-    agent = @item.account.ai_agents.active.first
-    if agent.nil?
-      Rails.logger.error "[FollowUpAI] Conta #{@item.account_id} sem agente IA ativo"
-      raise "Conta #{@item.account_id} não tem agente IA ativo configurado"
-    end
-
-    conversation = find_conversation_for_message
-    messages_history = build_followup_history(conversation)
-
-    parser = AiAgent::FollowUpPromptParser.new(
-      @config['ai_prompt'].to_s,
-      contact:       conversation&.contact,
-      conversation:  conversation,
-      stage:         @item.stage,
-      mode_override: @config['ai_mode_override']
-    )
-    ai_prompt = parser.call
-    intention_block = ai_prompt.present? ? "#{ai_prompt}\n\n" : ''
-
-    system_prompt = <<~PROMPT.strip
-      Você é #{agent.name}, atendente#{agent.company.present? ? " do escritório #{agent.company}" : ''}.
-
-      Sua tarefa é gerar UMA mensagem curta de follow-up via WhatsApp para um lead, com base no histórico de conversa anterior.
-
-      #{intention_block}REGRAS OBRIGATÓRIAS:
-      - Mensagem DEVE ter no máximo 500 caracteres
-      - Mensagem DEVE ter no máximo 4 linhas
-      - Tom: natural, amigável, profissional
-      - Linguagem: português brasileiro
-      - NÃO use markdown (sem *, _, #, etc — WhatsApp não renderiza)
-      - NÃO se apresente de novo se já houver histórico
-      - Continue a conversa de onde parou
-      - Se o histórico estiver vazio: faça um cold follow-up polido
-      - Retorne APENAS o texto da mensagem, sem prefixos tipo "Mensagem:" ou "Resposta:"
-    PROMPT
-
-    text = fetch_followup_text(agent, system_prompt, messages_history)
-
-    if text.blank?
-      static_fallback = @config['static_fallback'].to_s.strip
-      if static_fallback.present?
-        Rails.logger.warn "[FollowUpAI] LLM sem resposta após retries — usando static_fallback para item #{@item.id}"
-        return static_fallback.first(4000)
-      end
-
-      Rails.logger.error "[FollowUpAI] LLM sem resposta após retries e sem static_fallback configurado — pulando item #{@item.id}"
-      return nil
-    end
-
-    text = text.first(4000)
-    Rails.logger.info "[FollowUpAI] Gerada mensagem de #{text.length} chars para item #{@item.id}"
-    text
-  end
-
-  # bug H: LLM (Gemini Flash Lite, sobretudo) ocasionalmente retorna vazio de
-  # forma transitória. Em vez de `raise` (que deixava o Sidekiq retentar 25x
-  # por ~3 semanas, atrasando o follow-up de forma imprevisível e silenciosa),
-  # tenta algumas vezes com um pequeno backoff e desiste de forma controlada.
-  FOLLOWUP_RETRY_DELAYS = [0, 2, 5].freeze
-
-  def fetch_followup_text(agent, system_prompt, messages_history)
-    FOLLOWUP_RETRY_DELAYS.each_with_index do |delay, idx|
-      sleep_before_retry(delay) if idx.positive?
-
-      response = AiAgent::LlmService.call(agent, { system: system_prompt, messages: messages_history }, tools: [])
-
-      # v66 (Fix A): blindagem contra vazamento de scaffold do prompt (o Gemini
-      # Flash Lite ocasionalmente ecoa "Sua tarefa:", "(Aguardando resposta...)",
-      # "##", "---"). Nunca enviar essas meta-instruções ao WhatsApp do lead.
-      text = AiAgent::FollowUpOutputSanitizer.call(response.text.to_s)
-      return text if text.present?
-
-      Rails.logger.error "[FollowUpAI] LLM retornou mensagem vazia (tentativa #{idx + 1}/#{FOLLOWUP_RETRY_DELAYS.size}) para item #{@item.id}"
-    end
-
-    nil
-  end
-
-  def sleep_before_retry(seconds)
-    sleep(seconds)
-  end
-
-  def build_followup_history(conversation)
-    return [] unless conversation
-
-    conversation.messages
-                .where(message_type: %i[incoming outgoing])
-                .where(private: false)
-                .where.not(content_type: :activity)
-                .order(:created_at)
-                .last(20)
-                .filter_map do |msg|
-                  next if msg.content.blank?
-
-                  { role: msg.message_type == 'incoming' ? 'user' : 'assistant', content: msg.content }
-                end
+    stage_name    = @automation.trigger_stage&.name
+    contact_name  = @item.contact&.name || @item.contact_phone
+    "Olá#{contact_name ? ", #{contact_name.split.first}" : ''}! Estamos acompanhando seu processo na etapa \"#{stage_name}\". Podemos te ajudar com algo?"
   end
 
   # ── Webhook ─────────────────────────────────────────────────────────────────
@@ -566,17 +379,9 @@ class Kanban::ExecuteActionService
       pipeline_id = action['pipeline_id']&.to_i
       return unless stage_id&.positive?
 
-      new_stage = KanbanStage.find_by(id: stage_id)
-      return unless new_stage
-
-      old_stage_id = @item.stage_id
       attrs = { stage_id: stage_id }
       attrs[:pipeline_id] = pipeline_id if pipeline_id&.positive?
-
-      Kanban::CancelAutomationsService.new(@item, old_stage_id).perform
       @item.update!(attrs)
-      Kanban::AutomationSchedulerService.new(@item, new_stage).perform
-
       executed << { type: 'move_item', stage_id: stage_id }
       log_activity('automation_crm_moved', stage_id: stage_id, pipeline_id: pipeline_id)
 

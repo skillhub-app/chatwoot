@@ -135,8 +135,7 @@
       "CONVERSATION_UPDATED": "Conversa Atualizada",
       "MESSAGE_CREATED": "Mensagem Criada",
       "CONVERSATION_RESOLVED": "Conversa Resolvida",
-      "CONVERSATION_OPENED": "Conversa Aberta",
-      "AI_STATUS_CHANGED": "IA Ativada / Desativada"
+      "CONVERSATION_OPENED": "Conversa Aberta"
     },
     "ACTIONS": {
       "ASSIGN_AGENT": "Atribuir ao Agente",

@@ -36,15 +36,14 @@ class AutomationRule < ApplicationRecord
 
   def conditions_attributes
     %w[content email country_code status message_type browser_language assignee_id team_id referer city company inbox_id
-       mail_subject phone_number priority conversation_language labels private_note
-       kanban_stage_id kanban_pipeline_id]
+       mail_subject phone_number priority conversation_language labels private_note]
   end
 
   def actions_attributes
     %w[send_message add_label remove_label send_email_to_team assign_team assign_agent remove_assigned_agent
        remove_assigned_team send_webhook_event mute_conversation send_attachment change_status resolve_conversation
        open_conversation pending_conversation snooze_conversation change_priority send_email_transcript
-       add_private_note move_kanban_stage].freeze
+       add_private_note].freeze
   end
 
   def file_base_data
@@ -67,51 +66,18 @@ class AutomationRule < ApplicationRecord
     return if conditions.blank?
 
     attributes = conditions.map { |obj, _| obj['attribute_key'] }
-    invalid = attributes - conditions_attributes
-    invalid -= account.custom_attribute_definitions.pluck(:attribute_key)
-    errors.add(:conditions, "Automation conditions #{invalid.join(',')} not supported.") if invalid.any?
-
-    conditions.each do |cond|
-      case cond['attribute_key']
-      when 'kanban_stage_id'
-        Array(cond['values']).each { |id| validate_kanban_stage_ownership(id) }
-      when 'kanban_pipeline_id'
-        Array(cond['values']).each { |id| validate_kanban_pipeline_ownership(id) }
-      end
-    end
+    conditions = attributes - conditions_attributes
+    conditions -= account.custom_attribute_definitions.pluck(:attribute_key)
+    errors.add(:conditions, "Automation conditions #{conditions.join(',')} not supported.") if conditions.any?
   end
 
   def json_actions_format
     return if actions.blank?
 
     attributes = actions.map { |obj, _| obj['action_name'] }
-    invalid = attributes - actions_attributes
-    errors.add(:actions, "Automation actions #{invalid.join(',')} not supported.") if invalid.any?
+    actions = attributes - actions_attributes
 
-    actions.each do |action|
-      next unless action['action_name'] == 'move_kanban_stage'
-
-      stage_id = Array(action['action_params']).first.to_i
-      validate_kanban_stage_ownership(stage_id)
-    end
-  end
-
-  def validate_kanban_stage_ownership(stage_id)
-    stage = KanbanStage.find_by(id: stage_id)
-    if stage.nil?
-      errors.add(:conditions, "Etapa ##{stage_id} não encontrada")
-    elsif stage.account_id != account_id
-      errors.add(:conditions, 'Etapa não pertence à sua conta')
-    end
-  end
-
-  def validate_kanban_pipeline_ownership(pipeline_id)
-    pipeline = KanbanPipeline.find_by(id: pipeline_id)
-    if pipeline.nil?
-      errors.add(:conditions, "Funil ##{pipeline_id} não encontrado")
-    elsif pipeline.account_id != account_id
-      errors.add(:conditions, 'Funil não pertence à sua conta')
-    end
+    errors.add(:actions, "Automation actions #{actions.join(',')} not supported.") if actions.any?
   end
 
   def query_operator_presence

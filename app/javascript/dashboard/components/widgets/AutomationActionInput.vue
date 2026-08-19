@@ -1,7 +1,6 @@
 <script>
 import AutomationActionTeamMessageInput from './AutomationActionTeamMessageInput.vue';
 import AutomationActionFileInput from './AutomationFileInput.vue';
-import AutomationKanbanStageInput from './AutomationKanbanStageInput.vue';
 import WootMessageEditor from 'dashboard/components/widgets/WootWriter/Editor.vue';
 import NextButton from 'dashboard/components-next/button/Button.vue';
 import SingleSelect from 'dashboard/components-next/filter/inputs/SingleSelect.vue';
@@ -12,7 +11,6 @@ export default {
   components: {
     AutomationActionTeamMessageInput,
     AutomationActionFileInput,
-    AutomationKanbanStageInput,
     WootMessageEditor,
     NextButton,
     SingleSelect,
@@ -170,11 +168,6 @@ export default {
             v-else-if="inputType === 'attachment'"
             v-model="action_params"
             :initial-file-name="initialFileName"
-          />
-          <AutomationKanbanStageInput
-            v-else-if="inputType === 'cascade_pipeline_stage'"
-            v-model="action_params"
-            :pipelines="dropdownValues || []"
           />
         </template>
         <NextButton

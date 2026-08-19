@@ -192,7 +192,6 @@ gem 'pgvector'
 gem 'reverse_markdown'
 
 gem 'iso-639'
-gem 'pdf-reader'
 gem 'ruby-openai'
 gem 'ai-agents', '>= 0.9.1'
 

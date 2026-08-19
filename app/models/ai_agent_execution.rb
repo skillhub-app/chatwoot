@@ -1,5 +1,5 @@
 class AiAgentExecution < ApplicationRecord
-  STATUSES    = %w[success error skipped buffered protocol blocked].freeze
+  STATUSES    = %w[success error skipped buffered protocol].freeze
   INPUT_TYPES = %w[text audio image pdf].freeze
 
   belongs_to :ai_agent

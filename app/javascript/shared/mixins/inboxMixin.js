@@ -134,9 +134,6 @@ export default {
     isATiktokChannel() {
       return this.channelType === INBOX_TYPES.TIKTOK;
     },
-    isUazapiInbox() {
-      return this.channelType === INBOX_TYPES.UAZAPI;
-    },
   },
   methods: {
     inboxHasFeature(feature) {

@@ -1,9 +1,8 @@
 class AutomationRules::ActionService < ActionService
-  def initialize(rule, account, conversation, context = {})
+  def initialize(rule, account, conversation)
     super(conversation)
     @rule = rule
     @account = account
-    @context = context
     Current.executed_by = rule
   end
 
@@ -38,7 +37,6 @@ class AutomationRules::ActionService < ActionService
 
   def send_webhook_event(webhook_url)
     payload = @conversation.webhook_data.merge(event: "automation_event.#{@rule.event_name}")
-    payload[:ai_enabled] = @context[:ai_enabled] if @context.key?(:ai_enabled)
     WebhookJob.perform_later(webhook_url[0], payload)
   end
 
@@ -65,21 +63,5 @@ class AutomationRules::ActionService < ActionService
       TeamNotifications::AutomationNotificationMailer.conversation_creation(@conversation, team, params[0][:message])&.deliver_now
       @account.increment_email_sent_count
     end
-  end
-
-  def move_kanban_stage(params)
-    stage_id = Array(params).first.to_i
-    return unless stage_id.positive?
-
-    item = KanbanItem.find_by(conversation_id: @conversation.id)
-    return unless item
-
-    new_stage = KanbanStage.find_by(id: stage_id)
-    return unless new_stage
-
-    old_stage_id = item.stage_id
-    Kanban::CancelAutomationsService.new(item, old_stage_id).perform
-    item.update!(stage_id: stage_id, pipeline_id: new_stage.pipeline_id)
-    Kanban::AutomationSchedulerService.new(item, new_stage).perform
   end
 end

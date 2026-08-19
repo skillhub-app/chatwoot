@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_06_27_000001) do
+ActiveRecord::Schema[7.1].define(version: 2026_04_22_000004) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -73,7 +73,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_27_000001) do
     t.integer "status", default: 0
     t.jsonb "internal_attributes", default: {}, null: false
     t.jsonb "settings", default: {}
-    t.integer "uazapi_instance_limit"
     t.index ["status"], name: "index_accounts_on_status"
   end
 
@@ -144,174 +143,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_27_000001) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["account_id"], name: "index_agent_capacity_policies_on_account_id"
-  end
-
-  create_table "ai_agent_conversations", force: :cascade do |t|
-    t.bigint "ai_agent_id", null: false
-    t.bigint "conversation_id", null: false
-    t.bigint "contact_id"
-    t.string "state", default: "active", null: false
-    t.string "paused_reason"
-    t.integer "messages_received", default: 0, null: false
-    t.integer "messages_sent", default: 0, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["ai_agent_id", "conversation_id"], name: "idx_on_ai_agent_id_conversation_id_8797edf07e", unique: true
-    t.index ["ai_agent_id", "state"], name: "index_ai_agent_conversations_on_ai_agent_id_and_state"
-    t.index ["ai_agent_id"], name: "index_ai_agent_conversations_on_ai_agent_id"
-    t.index ["contact_id"], name: "index_ai_agent_conversations_on_contact_id"
-    t.index ["conversation_id"], name: "index_ai_agent_conversations_on_conversation_id"
-  end
-
-  create_table "ai_agent_executions", force: :cascade do |t|
-    t.bigint "ai_agent_id", null: false
-    t.bigint "conversation_id", null: false
-    t.string "input_type", default: "text", null: false
-    t.text "input_content"
-    t.text "output_content"
-    t.integer "tokens_used", default: 0
-    t.integer "duration_ms", default: 0
-    t.string "status", default: "success", null: false
-    t.string "protocol_triggered"
-    t.text "error_message"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["ai_agent_id", "created_at"], name: "index_ai_agent_executions_on_ai_agent_id_and_created_at"
-    t.index ["ai_agent_id"], name: "index_ai_agent_executions_on_ai_agent_id"
-    t.index ["conversation_id"], name: "index_ai_agent_executions_on_conversation_id"
-    t.index ["status"], name: "index_ai_agent_executions_on_status"
-  end
-
-  create_table "ai_agent_faqs", force: :cascade do |t|
-    t.bigint "ai_agent_id", null: false
-    t.string "category", default: "faq", null: false
-    t.text "situation"
-    t.text "question", null: false
-    t.text "answer", null: false
-    t.boolean "active", default: true, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["ai_agent_id", "category"], name: "index_ai_agent_faqs_on_ai_agent_id_and_category"
-    t.index ["ai_agent_id"], name: "index_ai_agent_faqs_on_ai_agent_id"
-  end
-
-  create_table "ai_agent_prompt_versions", force: :cascade do |t|
-    t.bigint "ai_agent_id", null: false
-    t.integer "version", null: false
-    t.jsonb "prompt", default: {}, null: false
-    t.bigint "created_by_id"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["ai_agent_id", "version"], name: "index_ai_agent_prompt_versions_on_ai_agent_id_and_version", unique: true
-    t.index ["ai_agent_id"], name: "index_ai_agent_prompt_versions_on_ai_agent_id"
-    t.index ["created_by_id"], name: "index_ai_agent_prompt_versions_on_created_by_id"
-  end
-
-  create_table "ai_agent_protocols", force: :cascade do |t|
-    t.bigint "ai_agent_id", null: false
-    t.string "protocol_type", null: false
-    t.string "label", null: false
-    t.string "keyword", null: false
-    t.string "phone_number"
-    t.boolean "auto_summarize", default: true, null: false
-    t.integer "position", default: 0, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.string "action", default: "pause_for_human", null: false
-    t.index ["ai_agent_id"], name: "index_ai_agent_protocols_on_ai_agent_id"
-  end
-
-  create_table "ai_agent_schedules", force: :cascade do |t|
-    t.bigint "ai_agent_id", null: false
-    t.string "google_calendar_id"
-    t.text "google_refresh_token_encrypted"
-    t.integer "slot_duration_minutes", default: 60, null: false
-    t.integer "max_days_in_advance", default: 30, null: false
-    t.integer "max_concurrent_bookings", default: 1, null: false
-    t.integer "min_notice_minutes", default: 60, null: false
-    t.string "default_subject"
-    t.jsonb "weekly_windows", default: {}, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.text "google_access_token_encrypted"
-    t.datetime "google_token_expires_at"
-    t.index ["ai_agent_id"], name: "index_ai_agent_schedules_on_ai_agent_id", unique: true
-  end
-
-  create_table "ai_agent_tool_executions", force: :cascade do |t|
-    t.bigint "ai_agent_id", null: false
-    t.bigint "ai_agent_execution_id"
-    t.bigint "ai_agent_tool_id"
-    t.string "tool_name", null: false
-    t.jsonb "input_params", default: {}, null: false
-    t.jsonb "output_result", default: {}, null: false
-    t.integer "http_status"
-    t.string "status", default: "success", null: false
-    t.integer "duration_ms", default: 0, null: false
-    t.text "error_message"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["ai_agent_execution_id"], name: "index_ai_agent_tool_executions_on_ai_agent_execution_id"
-    t.index ["ai_agent_id", "created_at"], name: "index_ai_agent_tool_executions_on_ai_agent_id_and_created_at"
-    t.index ["ai_agent_id"], name: "index_ai_agent_tool_executions_on_ai_agent_id"
-    t.index ["ai_agent_tool_id"], name: "index_ai_agent_tool_executions_on_ai_agent_tool_id"
-    t.index ["status"], name: "index_ai_agent_tool_executions_on_status"
-  end
-
-  create_table "ai_agent_tools", force: :cascade do |t|
-    t.bigint "ai_agent_id", null: false
-    t.string "name", null: false
-    t.text "description", null: false
-    t.jsonb "parameters_schema", default: {}, null: false
-    t.string "http_method", default: "POST", null: false
-    t.string "endpoint_url", null: false
-    t.jsonb "headers", default: {}, null: false
-    t.text "request_body_template"
-    t.text "response_template"
-    t.text "when_to_use"
-    t.integer "timeout_seconds", default: 10, null: false
-    t.boolean "active", default: true, null: false
-    t.integer "position", default: 0, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.boolean "is_native", default: false, null: false
-    t.string "native_key"
-    t.index ["ai_agent_id", "active"], name: "index_ai_agent_tools_on_ai_agent_id_and_active"
-    t.index ["ai_agent_id", "name"], name: "index_ai_agent_tools_on_ai_agent_id_and_name", unique: true
-    t.index ["ai_agent_id", "position"], name: "index_ai_agent_tools_on_ai_agent_id_and_position"
-    t.index ["ai_agent_id"], name: "index_ai_agent_tools_on_ai_agent_id"
-    t.index ["native_key"], name: "index_ai_agent_tools_on_native_key"
-  end
-
-  create_table "ai_agents", force: :cascade do |t|
-    t.bigint "account_id", null: false
-    t.bigint "inbox_id"
-    t.string "name", null: false
-    t.string "company"
-    t.string "language", default: "pt-BR"
-    t.string "timezone", default: "America/Sao_Paulo"
-    t.integer "message_buffer_seconds", default: 20, null: false
-    t.boolean "active", default: true, null: false
-    t.jsonb "prompt", default: {}, null: false
-    t.integer "prompt_version", default: 1, null: false
-    t.string "llm_provider", default: "openai"
-    t.string "llm_model", default: "gpt-4o"
-    t.string "llm_api_key_encrypted"
-    t.boolean "tts_enabled", default: false, null: false
-    t.string "tts_voice_id"
-    t.string "tts_api_key_encrypted"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.jsonb "prompt_draft", default: {}, null: false
-    t.string "reactivation_command", default: "/ia"
-    t.integer "message_chunk_size", default: 300, null: false
-    t.jsonb "summary_config", default: {}, null: false
-    t.bigint "llm_credential_id"
-    t.integer "memory_window_messages", default: 100, null: false
-    t.index ["account_id", "active"], name: "index_ai_agents_on_account_id_and_active"
-    t.index ["account_id", "inbox_id"], name: "index_ai_agents_on_account_id_and_inbox_id", unique: true
-    t.index ["account_id"], name: "index_ai_agents_on_account_id"
-    t.index ["inbox_id"], name: "index_ai_agents_on_inbox_id"
   end
 
   create_table "applied_slas", force: :cascade do |t|
@@ -737,20 +568,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_27_000001) do
     t.index ["account_id", "profile_id"], name: "index_channel_twitter_profiles_on_account_id_and_profile_id", unique: true
   end
 
-  create_table "channel_uazapi", force: :cascade do |t|
-    t.string "uazapi_instance_name", null: false
-    t.string "uazapi_instance_token"
-    t.string "phone_number"
-    t.string "identifier"
-    t.string "connection_status", default: "pending"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.bigint "account_id"
-    t.index ["account_id"], name: "index_channel_uazapi_on_account_id"
-    t.index ["identifier"], name: "index_channel_uazapi_on_identifier", unique: true
-    t.index ["uazapi_instance_name"], name: "index_channel_uazapi_on_uazapi_instance_name", unique: true
-  end
-
   create_table "channel_voice", force: :cascade do |t|
     t.string "phone_number", null: false
     t.string "provider", default: "twilio", null: false
@@ -1144,30 +961,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_27_000001) do
     t.index ["uploaded_by_id"], name: "index_kanban_attachments_on_uploaded_by_id"
   end
 
-  create_table "kanban_automation_actions", force: :cascade do |t|
-    t.bigint "kanban_automation_id", null: false
-    t.string "action_type", null: false
-    t.integer "position", default: 0, null: false
-    t.integer "delay_minutes", default: 0, null: false
-    t.string "delay_type", default: "minutes", null: false
-    t.boolean "active", default: true, null: false
-    t.jsonb "config", default: {}, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-  end
-
-  create_table "kanban_automation_executions", force: :cascade do |t|
-    t.bigint "kanban_item_id", null: false
-    t.bigint "kanban_automation_action_id", null: false
-    t.string "status", default: "pending", null: false
-    t.datetime "scheduled_at", precision: nil
-    t.datetime "executed_at", precision: nil
-    t.text "error_message"
-    t.jsonb "result", default: {}, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-  end
-
   create_table "kanban_automations", force: :cascade do |t|
     t.bigint "pipeline_id", null: false
     t.string "name", null: false
@@ -1181,7 +974,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_27_000001) do
     t.boolean "stop_on_human_takeover", default: false, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.boolean "stop_on_ai_disabled", default: false, null: false
     t.index ["action_stage_id"], name: "index_kanban_automations_on_action_stage_id"
     t.index ["pipeline_id", "active"], name: "index_kanban_automations_on_pipeline_id_and_active"
     t.index ["pipeline_id"], name: "index_kanban_automations_on_pipeline_id"
@@ -1222,7 +1014,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_27_000001) do
     t.jsonb "tags", default: [], null: false
     t.bigint "contact_id"
     t.bigint "lost_reason_id"
-    t.datetime "stage_entered_at"
     t.index ["account_id", "pipeline_id"], name: "index_kanban_items_on_account_id_and_pipeline_id"
     t.index ["account_id"], name: "index_kanban_items_on_account_id"
     t.index ["assignee_id"], name: "index_kanban_items_on_assignee_id"
@@ -1232,7 +1023,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_27_000001) do
     t.index ["pipeline_id"], name: "index_kanban_items_on_pipeline_id"
     t.index ["source"], name: "index_kanban_items_on_source"
     t.index ["stage_id", "position"], name: "index_kanban_items_on_stage_id_and_position"
-    t.index ["stage_id", "stage_entered_at"], name: "index_kanban_items_on_stage_id_and_stage_entered_at"
     t.index ["stage_id"], name: "index_kanban_items_on_stage_id"
     t.index ["temperature"], name: "index_kanban_items_on_temperature"
   end
@@ -1352,15 +1142,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_27_000001) do
     t.index ["user_id"], name: "index_leaves_on_user_id"
   end
 
-  create_table "llm_provider_credentials", force: :cascade do |t|
-    t.bigint "account_id", null: false
-    t.string "provider", null: false
-    t.string "api_key", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["account_id", "provider"], name: "index_llm_provider_credentials_on_account_id_and_provider", unique: true
-  end
-
   create_table "macros", force: :cascade do |t|
     t.bigint "account_id", null: false
     t.string "name", null: false
@@ -1405,10 +1186,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_27_000001) do
     t.jsonb "additional_attributes", default: {}
     t.text "processed_message_content"
     t.jsonb "sentiment", default: {}
-    t.datetime "deleted_at"
-    t.boolean "deleted_for_recipient", default: false, null: false
     t.index "((additional_attributes -> 'campaign_id'::text))", name: "index_messages_on_additional_attributes_campaign_id", using: :gin
-    t.index ["deleted_at"], name: "index_messages_on_deleted_at"
     t.index ["account_id", "content_type", "created_at"], name: "idx_messages_account_content_created"
     t.index ["account_id", "created_at", "message_type"], name: "index_messages_on_account_created_type"
     t.index ["account_id", "inbox_id"], name: "index_messages_on_account_id_and_inbox_id"
@@ -1717,28 +1495,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_06_27_000001) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
-  add_foreign_key "ai_agent_conversations", "ai_agents"
-  add_foreign_key "ai_agent_conversations", "contacts", on_delete: :nullify
-  add_foreign_key "ai_agent_conversations", "conversations", on_delete: :cascade
-  add_foreign_key "ai_agent_executions", "ai_agents"
-  add_foreign_key "ai_agent_executions", "conversations", on_delete: :cascade
-  add_foreign_key "ai_agent_faqs", "ai_agents"
-  add_foreign_key "ai_agent_prompt_versions", "ai_agents"
-  add_foreign_key "ai_agent_prompt_versions", "users", column: "created_by_id"
-  add_foreign_key "ai_agent_protocols", "ai_agents"
-  add_foreign_key "ai_agent_schedules", "ai_agents"
-  add_foreign_key "ai_agent_tool_executions", "ai_agent_executions", on_delete: :nullify
-  add_foreign_key "ai_agent_tool_executions", "ai_agent_tools", on_delete: :nullify
-  add_foreign_key "ai_agent_tool_executions", "ai_agents", on_delete: :cascade
-  add_foreign_key "ai_agent_tools", "ai_agents", on_delete: :cascade
-  add_foreign_key "ai_agents", "accounts"
-  add_foreign_key "ai_agents", "inboxes"
-  add_foreign_key "ai_agents", "llm_provider_credentials", column: "llm_credential_id", name: "ai_agents_llm_credential_id_fkey", on_delete: :nullify
   add_foreign_key "inboxes", "portals"
-  add_foreign_key "kanban_automation_actions", "kanban_automations", name: "fk_kanban_automation_actions_automation"
-  add_foreign_key "kanban_automation_executions", "kanban_automation_actions", name: "fk_kae_action"
-  add_foreign_key "kanban_automation_executions", "kanban_items", name: "fk_kae_item"
-  add_foreign_key "llm_provider_credentials", "accounts", name: "llm_provider_credentials_account_id_fkey"
   create_trigger("accounts_after_insert_row_tr", :generated => true, :compatibility => 1).
       on("accounts").
       after(:insert).

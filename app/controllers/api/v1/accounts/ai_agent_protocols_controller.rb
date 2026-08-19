@@ -34,7 +34,7 @@ class Api::V1::Accounts::AiAgentProtocolsController < Api::V1::Accounts::BaseCon
 
   def protocol_params
     params.require(:protocol).permit(
-      :protocol_type, :label, :keyword, :phone_number, :auto_summarize, :action, :position
+      :protocol_type, :label, :keyword, :phone_number, :auto_summarize, :position
     )
   end
 
@@ -46,7 +46,6 @@ class Api::V1::Accounts::AiAgentProtocolsController < Api::V1::Accounts::BaseCon
       keyword:        p.keyword,
       phone_number:   p.phone_number,
       auto_summarize: p.auto_summarize,
-      action:         p.action,
       position:       p.position
     }
   end

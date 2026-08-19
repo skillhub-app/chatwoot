@@ -1,5 +1,5 @@
 class Api::V1::Accounts::AiAgentsController < Api::V1::Accounts::BaseController
-  before_action :set_agent, only: %i[show update destroy publish_prompt save_draft playground prompt_assistant export reset_memory]
+  before_action :set_agent, only: %i[show update destroy publish_prompt save_draft playground prompt_assistant export]
 
   def index
     @agents = Current.account.ai_agents.includes(:inbox, :ai_agent_schedule).order(:name)
@@ -57,13 +57,6 @@ class Api::V1::Accounts::AiAgentsController < Api::V1::Accounts::BaseController
     send_data data.to_json, filename: filename, type: 'application/json', disposition: 'attachment'
   end
 
-  def reset_memory
-    check_authorization(@agent)
-    executions_count   = @agent.ai_agent_executions.delete_all
-    conversations_count = @agent.ai_agent_conversations.delete_all
-    render json: { deleted: { executions: executions_count, conversations: conversations_count } }
-  end
-
   def import
     raw   = params[:agent_data]
     data  = raw.is_a?(String) ? JSON.parse(raw) : raw.to_unsafe_h
@@ -85,7 +78,7 @@ class Api::V1::Accounts::AiAgentsController < Api::V1::Accounts::BaseController
   def agent_params
     params.require(:ai_agent).permit(
       :name, :company, :language, :timezone,
-      :message_buffer_seconds, :memory_window_messages, :active, :inbox_id,
+      :message_buffer_seconds, :active, :inbox_id,
       :llm_provider, :llm_model, :llm_api_key_encrypted,
       :tts_enabled, :tts_voice_id, :tts_api_key_encrypted,
       :reactivation_command, :message_chunk_size,

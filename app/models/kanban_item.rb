@@ -61,7 +61,7 @@ class KanbanItem < ApplicationRecord
   validates :temperature, inclusion: { in: TEMPERATURES }, allow_nil: true
   validate :stage_belongs_to_pipeline
 
-  scope :ordered, -> { order(:position, Arel.sql('stage_entered_at DESC NULLS LAST')) }
+  scope :ordered, -> { order(:position, :created_at) }
   scope :for_account, ->(account_id) { where(account_id: account_id) }
   scope :for_pipeline, ->(pipeline_id) { where(pipeline_id: pipeline_id) }
   scope :for_stage, ->(stage_id) { where(stage_id: stage_id) }
@@ -72,7 +72,6 @@ class KanbanItem < ApplicationRecord
   scope :lost, -> { where.not(lost_at: nil) }
   scope :open, -> { where(won_at: nil, lost_at: nil) }
 
-  before_save :track_stage_change
   after_create :log_created_activity
 
   def won?
@@ -94,10 +93,6 @@ class KanbanItem < ApplicationRecord
   end
 
   private
-
-  def track_stage_change
-    self.stage_entered_at = Time.current if new_record? || stage_id_changed?
-  end
 
   def stage_belongs_to_pipeline
     return unless stage_id.present? && pipeline_id.present?

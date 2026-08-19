@@ -1,12 +1,8 @@
-import { computed, watchEffect } from 'vue';
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import languages from 'dashboard/components/widgets/conversation/advancedFilterItems/languages';
 import countries from 'shared/constants/countries';
-import {
-  useStoreGetters,
-  useMapGetter,
-  useStore,
-} from 'dashboard/composables/store';
+import { useStoreGetters, useMapGetter } from 'dashboard/composables/store';
 
 import {
   getActionOptions,
@@ -23,7 +19,6 @@ import {
  */
 export default function useAutomationValues() {
   const getters = useStoreGetters();
-  const store = useStore();
   const { t } = useI18n();
   const agents = useMapGetter('agents/getVerifiedAgents');
   const campaigns = useMapGetter('campaigns/getAllCampaigns');
@@ -32,28 +27,6 @@ export default function useAutomationValues() {
   const labels = useMapGetter('labels/getLabels');
   const teams = useMapGetter('teams/getTeams');
   const slaPolicies = useMapGetter('sla/getSLA');
-  const kanbanPipelines = useMapGetter('kanban/getPipelines');
-
-  store.dispatch('kanban/fetchPipelines');
-
-  // Fetch stages for each pipeline so condition options are populated
-  watchEffect(() => {
-    (kanbanPipelines.value || []).forEach(p => {
-      store.dispatch('kanban/fetchPipelineStages', p.id);
-    });
-  });
-
-  const kanbanAllStages = computed(() =>
-    (kanbanPipelines.value || []).flatMap(pipeline => {
-      const stages = getters['kanban/getPipelineStagesCache'].value(
-        pipeline.id
-      );
-      return stages.map(s => ({
-        id: s.id,
-        name: `${pipeline.name} › ${s.name}`,
-      }));
-    })
-  );
 
   const booleanFilterOptions = computed(() => [
     { id: true, name: t('FILTER.ATTRIBUTE_LABELS.TRUE') },
@@ -124,15 +97,6 @@ export default function useAutomationValues() {
    * @returns {Array} An array of condition dropdown values.
    */
   const getConditionDropdownValues = type => {
-    if (type === 'kanban_pipeline_id') {
-      return (kanbanPipelines.value || []).map(p => ({
-        id: p.id,
-        name: p.name,
-      }));
-    }
-    if (type === 'kanban_stage_id') {
-      return kanbanAllStages.value;
-    }
     return getConditionOptions({
       agents: agents.value,
       booleanFilterOptions: booleanFilterOptions.value,
@@ -157,13 +121,6 @@ export default function useAutomationValues() {
    * @returns {Array} An array of action dropdown values.
    */
   const getActionDropdownValues = type => {
-    if (type === 'move_kanban_stage') {
-      return (kanbanPipelines.value || []).map(p => ({
-        id: p.id,
-        name: p.name,
-      }));
-    }
-
     let agentsList = agents.value;
     if (type === 'assign_agent') {
       agentsList = [
@@ -202,6 +159,5 @@ export default function useAutomationValues() {
     labels,
     teams,
     slaPolicies,
-    kanbanPipelines,
   };
 }

@@ -100,7 +100,7 @@ class Api::V1::Accounts::AiAgentScheduleController < Api::V1::Accounts::BaseCont
   end
 
   def google_callback_url
-    "#{ENV.fetch('FRONTEND_URL', 'http://localhost:3000')}/google_calendar/callback"
+    "#{ENV.fetch('FRONTEND_URL', 'http://localhost:3000')}/auth/google_calendar/callback"
   end
 
   def frontend_agent_url(account_id, agent_id)

@@ -9,7 +9,6 @@ import Slack from './Slack.vue';
 import Linear from './Linear.vue';
 import Notion from './Notion.vue';
 import Shopify from './Shopify.vue';
-import LlmProviders from './LlmProviders.vue';
 
 export default {
   routes: [
@@ -88,15 +87,6 @@ export default {
             permissions: ['administrator'],
           },
           props: route => ({ error: route.query.error }),
-        },
-        {
-          path: 'llm_providers',
-          name: 'settings_integrations_llm_providers',
-          component: LlmProviders,
-          meta: {
-            featureFlag: FEATURE_FLAGS.INTEGRATIONS,
-            permissions: ['administrator'],
-          },
         },
         {
           path: ':integration_id',

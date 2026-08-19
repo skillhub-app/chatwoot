@@ -3,9 +3,7 @@
 import { ref, watch, computed } from 'vue';
 import { useStore } from 'vuex';
 import aiAgentsAPI from '../../api/aiAgents';
-import llmProviderCredentialsAPI from '../../api/llmProviderCredentials';
 import AiAgentProtocols from './AiAgentProtocols.vue';
-import LlmProvidersConfigModal from './LlmProvidersConfigModal.vue';
 
 const props = defineProps({ agent: { type: Object, required: true } });
 const emit = defineEmits(['updated']);
@@ -30,36 +28,21 @@ const TIMEZONES = [
 
 const LLM_MODELS_BY_PROVIDER = {
   openai: [
-    { value: 'gpt-5.5', label: 'GPT-5.5' },
-    { value: 'gpt-5.4', label: 'GPT-5.4' },
-    { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
-    { value: 'gpt-5.4-nano', label: 'GPT-5.4 Nano' },
-    { value: 'gpt-5.1', label: 'GPT-5.1' },
-    { value: 'gpt-4.1', label: 'GPT-4.1' },
-    { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini' },
     { value: 'gpt-4o', label: 'GPT-4o' },
     { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
   ],
   anthropic: [
-    { value: 'claude-opus-4-8', label: 'Claude Opus 4.8' },
-    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-    { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
+    { value: 'claude-opus-4-7', label: 'Claude Opus 4' },
+    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4' },
+    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
   ],
   gemini: [
-    { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
-    { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' },
-    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-    { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
-    { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', preview: true },
-    { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', preview: true },
+    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+    { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite' },
+    { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+    { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
   ],
-};
-
-const PROVIDER_LABELS = {
-  openai: 'OpenAI',
-  anthropic: 'Anthropic',
-  gemini: 'Google Gemini',
 };
 
 const inboxes = ref(store.getters['inboxes/getInboxes'] || []);
@@ -74,12 +57,12 @@ const form = ref({
   message_buffer_seconds: props.agent.message_buffer_seconds,
   llm_provider: props.agent.llm_provider || 'openai',
   llm_model: props.agent.llm_model || 'gpt-4o',
+  llm_api_key_encrypted: '',
   tts_enabled: props.agent.tts_enabled,
   tts_voice_id: props.agent.tts_voice_id || '',
   tts_api_key_encrypted: '',
   reactivation_command: props.agent.reactivation_command || '/ia',
   message_chunk_size: props.agent.message_chunk_size || 300,
-  memory_window_messages: props.agent.memory_window_messages ?? 100,
 });
 
 watch(
@@ -95,12 +78,12 @@ watch(
       message_buffer_seconds: a.message_buffer_seconds,
       llm_provider: a.llm_provider || 'openai',
       llm_model: a.llm_model || 'gpt-4o',
+      llm_api_key_encrypted: '',
       tts_enabled: a.tts_enabled,
       tts_voice_id: a.tts_voice_id || '',
       tts_api_key_encrypted: '',
       reactivation_command: a.reactivation_command || '/ia',
       message_chunk_size: a.message_chunk_size || 300,
-      memory_window_messages: a.memory_window_messages ?? 100,
     };
   }
 );
@@ -109,41 +92,13 @@ const llmModels = computed(
   () => LLM_MODELS_BY_PROVIDER[form.value.llm_provider] || LLM_MODELS_BY_PROVIDER.openai
 );
 
-const providerLabel = computed(
-  () => PROVIDER_LABELS[form.value.llm_provider] || form.value.llm_provider
-);
-
-const configuredProviders = ref([]);
-const showLlmProvidersModal = ref(false);
-
-const hasCredentialForProvider = computed(() =>
-  configuredProviders.value.includes(form.value.llm_provider)
-);
-
-async function loadConfiguredProviders() {
-  try {
-    const { data } = await llmProviderCredentialsAPI.getAll();
-    configuredProviders.value = (data.payload || [])
-      .filter(c => c.has_api_key)
-      .map(c => c.provider);
-  } catch {
-    configuredProviders.value = [];
-  }
-}
-
-loadConfiguredProviders();
-
-function closeLlmProvidersModal() {
-  showLlmProvidersModal.value = false;
-  loadConfiguredProviders();
-}
-
 async function save() {
   saving.value = true;
   error.value = null;
   saved.value = false;
   try {
     const payload = { ...form.value };
+    if (!payload.llm_api_key_encrypted) delete payload.llm_api_key_encrypted;
     if (!payload.tts_api_key_encrypted) delete payload.tts_api_key_encrypted;
     const res = await aiAgentsAPI.update(props.agent.id, payload);
     emit('updated', res.data.payload);
@@ -155,23 +110,6 @@ async function save() {
     error.value = 'Erro ao salvar configurações.';
   } finally {
     saving.value = false;
-  }
-}
-
-const showResetConfirm = ref(false);
-const resetting = ref(false);
-
-async function resetMemory() {
-  if (!showResetConfirm.value) {
-    showResetConfirm.value = true;
-    return;
-  }
-  resetting.value = true;
-  showResetConfirm.value = false;
-  try {
-    await aiAgentsAPI.resetMemory(props.agent.id);
-  } finally {
-    resetting.value = false;
   }
 }
 
@@ -300,30 +238,23 @@ const labelClass =
           <label :class="labelClass">Modelo</label>
           <select v-model="form.llm_model" :class="inputClass">
             <option v-for="m in llmModels" :key="m.value" :value="m.value">
-              {{ m.label }}{{ m.preview ? ' [Preview]' : '' }}
+              {{ m.label }}
             </option>
           </select>
         </div>
       </div>
-      <div
-        v-if="!hasCredentialForProvider"
-        class="flex items-start gap-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2"
-      >
-        <span class="i-lucide-alert-triangle size-4 text-amber-500 mt-0.5" />
-        <p class="text-xs text-amber-700 dark:text-amber-300">
-          Você selecionou {{ providerLabel }} mas não há API key configurada
-          para este provider.
-          <a
-            class="underline cursor-pointer font-medium"
-            @click="showLlmProvidersModal = true"
-            >Configurar agora</a
-          >
-        </p>
+      <div>
+        <label :class="labelClass"
+          >API Key (deixe em branco para manter a atual)</label
+        >
+        <input
+          v-model="form.llm_api_key_encrypted"
+          type="password"
+          placeholder="sk-..."
+          :class="inputClass"
+          autocomplete="off"
+        />
       </div>
-      <p v-else class="text-[11px] text-slate-400">
-        As chaves de API são gerenciadas em Configurações → Integrações → LLM
-        Providers.
-      </p>
     </div>
 
     <!-- Comportamento -->
@@ -363,52 +294,6 @@ const labelClass =
           <p class="text-[11px] text-slate-400 mt-1">
             Mensagens longas são divididas em partes aproximadas deste tamanho.
           </p>
-        </div>
-        <div>
-          <label :class="labelClass">Janela de memória (mensagens)</label>
-          <input
-            v-model.number="form.memory_window_messages"
-            type="number"
-            min="10"
-            max="500"
-            :class="inputClass"
-          />
-          <p class="text-[11px] text-slate-400 mt-1">
-            Quantas mensagens passadas o agente lembra (10–500).
-          </p>
-        </div>
-      </div>
-
-      <!-- Reset memory -->
-      <div class="pt-2 border-t border-slate-100 dark:border-slate-700">
-        <div v-if="!showResetConfirm" class="flex items-center gap-2">
-          <button
-            class="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 transition-colors"
-            :disabled="resetting"
-            @click="resetMemory"
-          >
-            <span class="i-lucide-trash-2 size-3.5" />
-            Resetar memória de todas as conversas
-          </button>
-        </div>
-        <div v-else class="flex items-center gap-3">
-          <span class="text-xs text-red-600 font-medium">
-            Vai apagar a memória do agente em TODAS as conversas. As mensagens
-            permanecem no Chatwoot. Confirmar?
-          </span>
-          <button
-            class="text-xs font-semibold text-white bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg transition-colors"
-            :disabled="resetting"
-            @click="resetMemory"
-          >
-            {{ resetting ? 'Apagando...' : 'Confirmar' }}
-          </button>
-          <button
-            class="text-xs text-slate-500 hover:text-slate-700 transition-colors"
-            @click="showResetConfirm = false"
-          >
-            Cancelar
-          </button>
         </div>
       </div>
     </div>
@@ -473,10 +358,5 @@ const labelClass =
         </div>
       </template>
     </div>
-
-    <LlmProvidersConfigModal
-      :show="showLlmProvidersModal"
-      @close="closeLlmProvidersModal"
-    />
   </div>
 </template>
