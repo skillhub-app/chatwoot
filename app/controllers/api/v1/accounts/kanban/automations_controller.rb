@@ -42,7 +42,7 @@ class Api::V1::Accounts::Kanban::AutomationsController < Api::V1::Accounts::Base
   def fetch_automation
     @automation = KanbanAutomation
                   .joins(:pipeline)
-                  .where(pipelines: { account_id: Current.account.id })
+                  .where(kanban_pipelines: { account_id: Current.account.id })
                   .find(params[:id])
   end
 

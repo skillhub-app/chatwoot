@@ -99,6 +99,31 @@ RSpec.describe AiAgent::GoogleCalendar::ApiClient do
     end
   end
 
+  describe 'token expirado com refresh falhando por invalid_grant (bug F)' do
+    let(:expired_schedule) do
+      ai_agent.create_ai_agent_schedule!(
+        google_refresh_token_encrypted: 'dead_refresh_token',
+        google_access_token_encrypted:  'stale_access_token',
+        google_token_expires_at:        1.hour.ago
+      )
+    end
+
+    before do
+      allow(AiAgent::GoogleCalendar::AuthService).to receive(:client_id).and_return('test-client-id')
+      allow(AiAgent::GoogleCalendar::AuthService).to receive(:client_secret).and_return('test-client-secret')
+      stub_request(:post, 'https://oauth2.googleapis.com/token')
+        .to_return(status: 400, body: { error: 'invalid_grant', error_description: 'Bad Request' }.to_json,
+                   headers: { 'Content-Type' => 'application/json' })
+    end
+
+    it 'notifica o InvalidGrantMonitor com o agente correto e ainda propaga o erro original' do
+      allow(AiAgent::GoogleCalendar::InvalidGrantMonitor).to receive(:track!)
+
+      expect { described_class.new(expired_schedule) }.to raise_error(/Google token refresh failed/)
+      expect(AiAgent::GoogleCalendar::InvalidGrantMonitor).to have_received(:track!).with(ai_agent)
+    end
+  end
+
   describe 'path sem "/" inicial (regressão do bug)' do
     it 'NUNCA bate na raiz do host sem o prefixo /calendar/v3' do
       stub_request(:get, "#{base}/users/me/calendarList")

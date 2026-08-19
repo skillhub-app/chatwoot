@@ -54,9 +54,16 @@ class AiAgent::GoogleCalendar::ApiClient
   def ensure_valid_token!
     return unless @schedule.token_expired?
 
-    token_data = AiAgent::GoogleCalendar::AuthService.refresh_token(
-      @schedule.google_refresh_token_encrypted
-    )
+    token_data = begin
+      AiAgent::GoogleCalendar::AuthService.refresh_token(
+        @schedule.google_refresh_token_encrypted
+      )
+    rescue StandardError => e
+      if e.message.include?('invalid_grant')
+        AiAgent::GoogleCalendar::InvalidGrantMonitor.track!(@schedule.ai_agent)
+      end
+      raise
+    end
     @schedule.update_columns(
       google_access_token_encrypted: token_data['access_token'],
       google_token_expires_at:       Time.current + token_data['expires_in'].to_i.seconds

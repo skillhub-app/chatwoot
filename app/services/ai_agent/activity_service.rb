@@ -17,6 +17,10 @@ class AiAgent::ActivityService
     log(conversation, 'IA pausada automaticamente (resposta humana)')
   end
 
+  def self.ai_error(conversation)
+    log(conversation, 'Erro ao processar mensagem, um colega foi avisado')
+  end
+
   def self.log(conversation, content)
     return if conversation.blank? || content.blank?
 

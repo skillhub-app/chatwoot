@@ -149,25 +149,44 @@ RSpec.describe Kanban::ExecuteActionService do
       context 'com ai_prompt preenchido' do
         before { action.update!(config: { 'use_ai' => true, 'ai_prompt' => 'lembrar do desconto de 20%' }) }
 
-        it 'inclui INTENÇÃO DO OPERADOR no system prompt' do
+        it 'inclui o ai_prompt do operador (via FollowUpPromptParser) no system prompt' do
           allow(AiAgent::LlmService).to receive(:call).and_return(llm_response)
           service.send(:generate_ai_message)
           expect(AiAgent::LlmService).to have_received(:call) do |_agent, prompt, **|
-            expect(prompt[:system]).to include('INTENÇÃO DO OPERADOR')
+            expect(prompt[:system]).to include('<exemplo_de_mensagem>')
             expect(prompt[:system]).to include('lembrar do desconto de 20%')
           end
         end
       end
 
-      context 'quando LLM retorna texto vazio' do
+      context 'quando LLM retorna texto vazio (bug H)' do
         let(:empty_response) do
           AiAgent::LlmService::LlmResponse.new(type: :text, text: '', tool_calls: [], raw_parts: nil)
         end
 
-        it 'raise com mensagem descritiva' do
+        before { allow_any_instance_of(described_class).to receive(:sleep_before_retry) } # rubocop:disable RSpec/AnyInstance
+
+        it 'tenta 3 vezes (1 original + 2 retries) antes de desistir' do
           allow(AiAgent::LlmService).to receive(:call).and_return(empty_response)
-          expect { service.send(:generate_ai_message) }
-            .to raise_error(RuntimeError, /mensagem vazia/)
+          service.send(:generate_ai_message)
+          expect(AiAgent::LlmService).to have_received(:call).exactly(3).times
+        end
+
+        it 'sem static_fallback configurado, retorna nil (não faz mais raise)' do
+          allow(AiAgent::LlmService).to receive(:call).and_return(empty_response)
+          expect(service.send(:generate_ai_message)).to be_nil
+        end
+
+        it 'com static_fallback configurado, retorna a mensagem estática' do
+          action.update!(config: action.config.merge('static_fallback' => 'Mensagem padrão de fallback'))
+          allow(AiAgent::LlmService).to receive(:call).and_return(empty_response)
+          expect(service.send(:generate_ai_message)).to eq('Mensagem padrão de fallback')
+        end
+
+        it 'se a 3ª tentativa vier preenchida, usa o texto dessa tentativa' do
+          filled_response = AiAgent::LlmService::LlmResponse.new(type: :text, text: 'Oi, tudo bem?', tool_calls: [], raw_parts: nil)
+          allow(AiAgent::LlmService).to receive(:call).and_return(empty_response, empty_response, filled_response)
+          expect(service.send(:generate_ai_message)).to eq('Oi, tudo bem?')
         end
       end
 
@@ -182,6 +201,55 @@ RSpec.describe Kanban::ExecuteActionService do
           expect(result.length).to eq(4000)
         end
       end
+    end
+  end
+
+  describe '#inside_business_hours? (bug D)' do
+    subject(:service) { build_service }
+
+    before do
+      action.update!(config: { 'use_ai' => false, 'message' => 'oi', 'business_hours_start' => '07:00',
+                                'business_hours_end' => '19:55' })
+    end
+
+    it 'usa horário de Brasília, não UTC, para decidir se está dentro do horário comercial' do
+      # 04:36 BRT == 07:36 UTC. Antes do fix, Time.zone (UTC) fazia esse horário
+      # passar como "dentro" da janela 07:00-19:55 configurada em BRT.
+      travel_to Time.utc(2026, 6, 28, 7, 36) do
+        expect(service.send(:inside_business_hours?)).to be false
+      end
+    end
+
+    it 'aceita um horário realmente dentro da janela comercial em BRT' do
+      # 10:00 BRT == 13:00 UTC
+      travel_to Time.utc(2026, 6, 28, 13, 0) do
+        expect(service.send(:inside_business_hours?)).to be true
+      end
+    end
+
+    it 'rejeita um horário realmente fora da janela em BRT (23h BRT)' do
+      # 23:00 BRT == 02:00 UTC (dia seguinte)
+      travel_to Time.utc(2026, 6, 29, 2, 0) do
+        expect(service.send(:inside_business_hours?)).to be false
+      end
+    end
+  end
+
+  describe '#execute_send_whatsapp quando generate_ai_message retorna nil (bug H)' do
+    before { ai_agent }
+
+    it 'marca a execution como skipped (não failed) e registra activity, sem enviar mensagem' do
+      service = build_service
+      allow(service).to receive(:generate_ai_message).and_return(nil)
+      expect(Messages::MessageBuilder).not_to receive(:new)
+
+      service.perform
+
+      execution.reload
+      expect(execution.status).to eq('skipped')
+      expect(execution.result['error']).to eq('llm_empty_response')
+      expect(item.kanban_activities.last.action_type).to eq('automation_skipped')
+      expect(item.kanban_activities.last.metadata['reason']).to eq('llm_empty_response')
     end
   end
 

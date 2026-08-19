@@ -74,9 +74,13 @@ RSpec.describe Kanban::ExecuteActionService do
       expect(AiAgent::FollowUpOutputSanitizer).to have_received(:call).with('Oi, tudo certo?')
     end
 
-    it 'levanta erro se a resposta for puramente scaffold (vazia após sanitização)' do
+    it 'se a resposta for puramente scaffold em todas as tentativas (bug H), retorna nil em vez de levantar erro' do
+      # bug H (v71): raise indefinido virou retry (3x) + retorno nil/static_fallback
+      # controlado — não faz mais o Sidekiq retentar o job por ~3 semanas.
+      allow_any_instance_of(described_class).to receive(:sleep_before_retry) # rubocop:disable RSpec/AnyInstance
       stub_llm("## Sua tarefa:\n---")
-      expect { service.send(:generate_ai_message) }.to raise_error(RuntimeError, /vazia/)
+      expect(service.send(:generate_ai_message)).to be_nil
+      expect(AiAgent::LlmService).to have_received(:call).exactly(3).times
     end
   end
 end
