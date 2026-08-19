@@ -17,7 +17,13 @@ class Kanban::AutomationSchedulerService
 
     automations.each do |automation|
       automation.kanban_automation_actions.active.ordered.each do |action|
-        run_at = action.delay_minutes.minutes.from_now
+        multiplier = {
+          'minutes'       => 1,
+          'hours'         => 60,
+          'days'          => 1440,
+          'business_days' => 1440
+        }.fetch(action.delay_type, 1)
+        run_at = (action.delay_minutes * multiplier).minutes.from_now
         execution = KanbanAutomationExecution.create!(
           kanban_item:              @item,
           kanban_automation_action: action,

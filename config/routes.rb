@@ -1,4 +1,7 @@
 Rails.application.routes.draw do
+  # Google Calendar OAuth callback — must be BEFORE Devise mount to prevent /auth/* hijack
+  get '/google_calendar/callback', to: 'google_calendar_callbacks#callback'
+
   # AUTH STARTS
   mount_devise_token_auth_for 'User', at: 'auth', controllers: {
     confirmations: 'devise_overrides/confirmations',
@@ -107,6 +110,7 @@ Rails.application.routes.draw do
               post :reauthorize_page
             end
           end
+          resources :llm_provider_credentials, only: [:index, :create, :update, :destroy]
           resources :ai_agents, only: [:index, :show, :create, :update, :destroy] do
             collection { post :import }
             member do
@@ -115,6 +119,7 @@ Rails.application.routes.draw do
               post  :playground
               post  :prompt_assistant
               get   :export
+              post  :reset_memory
             end
             resources :faqs, only: [:index, :create, :update, :destroy],
                              controller: 'ai_agent_faqs' do
@@ -122,6 +127,10 @@ Rails.application.routes.draw do
             end
             resources :protocols, only: [:index, :create, :update, :destroy],
                                   controller: 'ai_agent_protocols'
+            resources :tools, only: [:index, :show, :create, :update, :destroy],
+                              controller: 'ai_agent_tools' do
+              member { post :test }
+            end
             resources :prompt_versions, only: [:index],
                                         controller: 'ai_agent_prompt_versions'
             resource :schedule, only: [:show, :update],
@@ -136,8 +145,16 @@ Rails.application.routes.draw do
             member { get :metrics, to: 'ai_agent_metrics#agent_stats' }
           end
           get 'ai_agent_metrics', to: 'ai_agent_metrics#index'
+          # Endpoints internos das tools nativas de calendário (chamados pelo
+          # ToolExecutor via X-Internal-Token; ai_agent_id vai na query string).
+          post 'ai_agent_calendar/consultar_horarios_livres', to: 'ai_agent_calendar#consultar_horarios_livres'
+          post 'ai_agent_calendar/criar_agendamento',         to: 'ai_agent_calendar#criar_agendamento'
+          post 'ai_agent_calendar/cancelar_agendamento',      to: 'ai_agent_calendar#cancelar_agendamento'
           namespace :kanban do
             get 'items', to: 'global_items#index'
+            resources :items, only: [] do
+              member { post 'notes', to: 'notes#external_create' }
+            end
             scope :gamification, controller: 'gamification' do
               get :rankings
               get :overview
@@ -174,7 +191,7 @@ Rails.application.routes.draw do
                     patch :reopen
                   end
                 end
-                resources :notes, only: [:index, :create, :destroy]
+                resources :notes, only: [:index, :create, :update, :destroy]
                 resources :activities, only: [:index]
                 resources :attachments, only: [:index, :create, :destroy]
                 resources :automation_executions, only: [:index], controller: 'automation_executions'
@@ -234,6 +251,10 @@ Rails.application.routes.draw do
               resource :participants, only: [:show, :create, :update, :destroy]
               resource :direct_uploads, only: [:create]
               resource :draft_messages, only: [:show, :update, :destroy]
+              resource :ai_agent_state, only: [:show, :update],
+                                        controller: 'ai_agent_state' do
+                member { post :reactivate }
+              end
             end
             member do
               post :mute
@@ -248,6 +269,7 @@ Rails.application.routes.draw do
               get :attachments
               get :inbox_assistant
               get :reporting_events if ChatwootApp.enterprise?
+              post :reset_ai_memory
             end
           end
 
@@ -314,8 +336,11 @@ Rails.application.routes.draw do
             get :health, on: :member
             post :register_webhook, on: :member
             post :reset_secret, on: :member
-            get  :uazapi_qr, on: :member
-            get  :uazapi_status, on: :member
+            get    :uazapi_qr, on: :member
+            get    :uazapi_status, on: :member
+            get    :uazapi_webhook_url, on: :member
+            delete :uazapi_logout, on: :member
+            post   :uazapi_reconnect, on: :member
             if ChatwootApp.enterprise?
               resource :conference, only: %i[create destroy], controller: 'conference' do
                 get :token, on: :member

@@ -80,6 +80,18 @@ export const AUTOMATIONS = {
         inputType: 'multi_select',
         filterOperators: OPERATOR_TYPES_3,
       },
+      {
+        key: 'kanban_pipeline_id',
+        name: 'KANBAN_PIPELINE',
+        inputType: 'search_select',
+        filterOperators: OPERATOR_TYPES_1,
+      },
+      {
+        key: 'kanban_stage_id',
+        name: 'KANBAN_STAGE',
+        inputType: 'search_select',
+        filterOperators: OPERATOR_TYPES_1,
+      },
     ],
     actions: [
       {
@@ -145,6 +157,10 @@ export const AUTOMATIONS = {
       {
         key: 'send_attachment',
         name: 'SEND_ATTACHMENT',
+      },
+      {
+        key: 'move_kanban_stage',
+        name: 'MOVE_KANBAN_STAGE',
       },
     ],
   },
@@ -216,6 +232,18 @@ export const AUTOMATIONS = {
         inputType: 'multi_select',
         filterOperators: OPERATOR_TYPES_3,
       },
+      {
+        key: 'kanban_pipeline_id',
+        name: 'KANBAN_PIPELINE',
+        inputType: 'search_select',
+        filterOperators: OPERATOR_TYPES_1,
+      },
+      {
+        key: 'kanban_stage_id',
+        name: 'KANBAN_STAGE',
+        inputType: 'search_select',
+        filterOperators: OPERATOR_TYPES_1,
+      },
     ],
     actions: [
       {
@@ -273,6 +301,10 @@ export const AUTOMATIONS = {
       {
         key: 'send_attachment',
         name: 'SEND_ATTACHMENT',
+      },
+      {
+        key: 'move_kanban_stage',
+        name: 'MOVE_KANBAN_STAGE',
       },
     ],
   },
@@ -356,6 +388,18 @@ export const AUTOMATIONS = {
         inputType: 'multi_select',
         filterOperators: OPERATOR_TYPES_3,
       },
+      {
+        key: 'kanban_pipeline_id',
+        name: 'KANBAN_PIPELINE',
+        inputType: 'search_select',
+        filterOperators: OPERATOR_TYPES_1,
+      },
+      {
+        key: 'kanban_stage_id',
+        name: 'KANBAN_STAGE',
+        inputType: 'search_select',
+        filterOperators: OPERATOR_TYPES_1,
+      },
     ],
     actions: [
       {
@@ -413,6 +457,10 @@ export const AUTOMATIONS = {
       {
         key: 'send_attachment',
         name: 'SEND_ATTACHMENT',
+      },
+      {
+        key: 'move_kanban_stage',
+        name: 'MOVE_KANBAN_STAGE',
       },
     ],
   },
@@ -490,6 +538,18 @@ export const AUTOMATIONS = {
         inputType: 'multi_select',
         filterOperators: OPERATOR_TYPES_3,
       },
+      {
+        key: 'kanban_pipeline_id',
+        name: 'KANBAN_PIPELINE',
+        inputType: 'search_select',
+        filterOperators: OPERATOR_TYPES_1,
+      },
+      {
+        key: 'kanban_stage_id',
+        name: 'KANBAN_STAGE',
+        inputType: 'search_select',
+        filterOperators: OPERATOR_TYPES_1,
+      },
     ],
     actions: [
       {
@@ -543,6 +603,10 @@ export const AUTOMATIONS = {
       {
         key: 'send_attachment',
         name: 'SEND_ATTACHMENT',
+      },
+      {
+        key: 'move_kanban_stage',
+        name: 'MOVE_KANBAN_STAGE',
       },
     ],
   },
@@ -614,6 +678,18 @@ export const AUTOMATIONS = {
         inputType: 'multi_select',
         filterOperators: OPERATOR_TYPES_1,
       },
+      {
+        key: 'kanban_pipeline_id',
+        name: 'KANBAN_PIPELINE',
+        inputType: 'search_select',
+        filterOperators: OPERATOR_TYPES_1,
+      },
+      {
+        key: 'kanban_stage_id',
+        name: 'KANBAN_STAGE',
+        inputType: 'search_select',
+        filterOperators: OPERATOR_TYPES_1,
+      },
     ],
     actions: [
       {
@@ -652,6 +728,84 @@ export const AUTOMATIONS = {
         key: 'send_attachment',
         name: 'SEND_ATTACHMENT',
       },
+      {
+        key: 'move_kanban_stage',
+        name: 'MOVE_KANBAN_STAGE',
+      },
+    ],
+  },
+  ai_status_changed: {
+    conditions: [
+      {
+        key: 'inbox_id',
+        name: 'INBOX',
+        inputType: 'multi_select',
+        filterOperators: OPERATOR_TYPES_1,
+      },
+      {
+        key: 'assignee_id',
+        name: 'ASSIGNEE_NAME',
+        inputType: 'search_select',
+        filterOperators: OPERATOR_TYPES_3,
+      },
+      {
+        key: 'team_id',
+        name: 'TEAM_NAME',
+        inputType: 'search_select',
+        filterOperators: OPERATOR_TYPES_3,
+      },
+      {
+        key: 'labels',
+        name: 'LABELS',
+        inputType: 'multi_select',
+        filterOperators: OPERATOR_TYPES_3,
+      },
+      {
+        key: 'kanban_pipeline_id',
+        name: 'KANBAN_PIPELINE',
+        inputType: 'search_select',
+        filterOperators: OPERATOR_TYPES_1,
+      },
+      {
+        key: 'kanban_stage_id',
+        name: 'KANBAN_STAGE',
+        inputType: 'search_select',
+        filterOperators: OPERATOR_TYPES_1,
+      },
+    ],
+    actions: [
+      {
+        key: 'send_webhook_event',
+        name: 'SEND_WEBHOOK_EVENT',
+      },
+      {
+        key: 'assign_agent',
+        name: 'ASSIGN_AGENT',
+      },
+      {
+        key: 'assign_team',
+        name: 'ASSIGN_TEAM',
+      },
+      {
+        key: 'send_message',
+        name: 'SEND_MESSAGE',
+      },
+      {
+        key: 'send_email_to_team',
+        name: 'SEND_EMAIL_TO_TEAM',
+      },
+      {
+        key: 'add_label',
+        name: 'ADD_LABEL',
+      },
+      {
+        key: 'remove_label',
+        name: 'REMOVE_LABEL',
+      },
+      {
+        key: 'move_kanban_stage',
+        name: 'MOVE_KANBAN_STAGE',
+      },
     ],
   },
 };
@@ -676,6 +830,10 @@ export const AUTOMATION_RULE_EVENTS = [
   {
     key: 'conversation_opened',
     value: 'CONVERSATION_OPENED',
+  },
+  {
+    key: 'ai_status_changed',
+    value: 'AI_STATUS_CHANGED',
   },
 ];
 
@@ -774,5 +932,10 @@ export const AUTOMATION_ACTION_TYPES = [
     key: 'add_sla',
     label: 'ADD_SLA',
     inputType: 'search_select',
+  },
+  {
+    key: 'move_kanban_stage',
+    label: 'MOVE_KANBAN_STAGE',
+    inputType: 'cascade_pipeline_stage',
   },
 ];

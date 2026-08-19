@@ -202,6 +202,54 @@ RSpec.describe AutomationRules::ActionService do
       end
     end
 
+    describe '#perform with move_kanban_stage action' do
+      let(:pipeline) { KanbanPipeline.create!(account: account, name: 'Test', position: 0, visibility_type: 'all') }
+      let(:stage_a)  { KanbanStage.create!(pipeline: pipeline, name: 'A', position: 0, probability: 0) }
+      let(:stage_b)  { KanbanStage.create!(pipeline: pipeline, name: 'B', position: 1, probability: 0) }
+      let!(:item) do
+        KanbanItem.create!(account: account, pipeline: pipeline, stage: stage_a,
+                           title: 'Card', position: 0, conversation: conversation)
+      end
+
+      before do
+        rule.actions = [{ action_name: 'move_kanban_stage', action_params: [stage_b.id] }]
+        rule.save!
+        allow(Kanban::CancelAutomationsService).to receive(:new).and_call_original
+        allow(Kanban::AutomationSchedulerService).to receive(:new).and_call_original
+      end
+
+      it 'moves the kanban item to the target stage' do
+        described_class.new(rule, account, conversation).perform
+        expect(item.reload.stage_id).to eq(stage_b.id)
+      end
+
+      it 'calls CancelAutomationsService for the old stage' do
+        cancel_svc = instance_double(Kanban::CancelAutomationsService, perform: nil)
+        allow(Kanban::CancelAutomationsService).to receive(:new).with(item, stage_a.id).and_return(cancel_svc)
+        described_class.new(rule, account, conversation).perform
+        expect(cancel_svc).to have_received(:perform)
+      end
+
+      it 'calls AutomationSchedulerService for the new stage' do
+        sched_svc = instance_double(Kanban::AutomationSchedulerService, perform: nil)
+        allow(Kanban::AutomationSchedulerService).to receive(:new).with(item, stage_b).and_return(sched_svc)
+        described_class.new(rule, account, conversation).perform
+        expect(sched_svc).to have_received(:perform)
+      end
+
+      it 'does nothing when conversation has no kanban item' do
+        other_conv = create(:conversation, account: account)
+        expect { described_class.new(rule, account, other_conv).perform }.not_to raise_error
+      end
+
+      it 'does nothing when target stage does not exist' do
+        rule.actions = [{ action_name: 'move_kanban_stage', action_params: [999_999] }]
+        rule.save!
+        expect { described_class.new(rule, account, conversation).perform }.not_to raise_error
+        expect(item.reload.stage_id).to eq(stage_a.id)
+      end
+    end
+
     describe '#perform with assign_agent action' do
       before do
         create(:inbox_member, inbox: conversation.inbox, user: agent)

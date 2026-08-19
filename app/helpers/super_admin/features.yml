@@ -71,6 +71,14 @@ captain:
   icon: 'icon-captain'
   config_key: 'captain'
 
+# ------- WhatsApp UAZAPI ------- #
+uazapi:
+  name: 'WhatsApp UAZAPI (V2)'
+  description: 'Provedor alternativo de WhatsApp via QR Code — auto-hospedado'
+  enabled: true
+  icon: 'icon-whatsapp-line'
+  config_key: 'uazapi'
+
 # ------- Communication Channels ------- #
 live_chat:
   name: 'Live Chat'

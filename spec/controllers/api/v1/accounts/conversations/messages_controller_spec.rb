@@ -207,15 +207,27 @@ RSpec.describe 'Conversation Messages API', type: :request do
         create(:inbox_member, inbox: conversation.inbox, user: agent)
       end
 
-      it 'deletes the message' do
-        delete "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/messages/#{message.id}",
+      # v68 — soft delete: só outgoing, conteúdo preservado (auditoria).
+      it 'soft-deletes an outgoing message preserving its content' do
+        outgoing = create(:message, message_type: :outgoing, content: 'hello there', conversation: conversation)
+
+        delete "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/messages/#{outgoing.id}",
                headers: agent.create_new_auth_token,
                as: :json
 
         expect(response).to have_http_status(:success)
-        expect(message.reload.content).to eq 'This message was deleted'
-        expect(message.reload.deleted).to be true
-        expect(message.reload.content_attributes['bcc_emails']).to be_nil
+        expect(outgoing.reload.deleted_at).to be_present
+        expect(outgoing.reload.content).to eq 'hello there'
+        expect(outgoing.reload.deleted).to be true
+      end
+
+      it 'returns forbidden when trying to delete an incoming message' do
+        delete "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/messages/#{message.id}",
+               headers: agent.create_new_auth_token,
+               as: :json
+
+        expect(response).to have_http_status(:forbidden)
+        expect(message.reload.deleted_at).to be_nil
       end
 
       it 'deletes interactive messages' do

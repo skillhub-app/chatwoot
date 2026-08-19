@@ -6,6 +6,8 @@ class Facebook::SendOnFacebookService < Base::SendOnChannelService
   end
 
   def perform_reply
+    return unless within_messaging_window?
+
     send_message_to_facebook fb_text_message_params if message.content.present?
 
     if message.attachments.present?
@@ -48,8 +50,7 @@ class Facebook::SendOnFacebookService < Base::SendOnChannelService
     {
       recipient: { id: contact.get_source_id(inbox.id) },
       message: fb_text_message_payload,
-      messaging_type: 'MESSAGE_TAG',
-      tag: message_tag
+      messaging_type: 'RESPONSE'
     }
   end
 
@@ -89,13 +90,8 @@ class Facebook::SendOnFacebookService < Base::SendOnChannelService
           }
         }
       },
-      messaging_type: 'MESSAGE_TAG',
-      tag: message_tag
+      messaging_type: 'RESPONSE'
     }
-  end
-
-  def message_tag
-    @message_tag ||= GlobalConfigService.load('ENABLE_MESSENGER_CHANNEL_HUMAN_AGENT', nil) ? 'HUMAN_AGENT' : 'ACCOUNT_UPDATE'
   end
 
   def attachment_type(attachment)
@@ -107,6 +103,23 @@ class Facebook::SendOnFacebookService < Base::SendOnChannelService
   def sent_first_outgoing_message_after_24_hours?
     # we can send max 1 message after 24 hour window
     conversation.messages.outgoing.where('id > ?', conversation.last_incoming_message.id).count == 1
+  end
+
+  # PATCH FORK-SPECIFIC (ver PATCH_MESSENGER.md): a Meta descontinuou as message
+  # tags (envio com tag => code 100 / subcode 1893061 "tag descontinuada"). A
+  # única forma permitida é responder DENTRO da janela de 24h com
+  # messaging_type RESPONSE. Fora da janela, descartamos o envio silenciosamente
+  # (sem tag descontinuada, sem marcar a mensagem como failed).
+  def within_messaging_window?
+    last_incoming = conversation.last_incoming_message
+    return false if last_incoming.blank?
+    return true if last_incoming.created_at >= 24.hours.ago
+
+    Rails.logger.info(
+      '[Facebook][messenger][out_of_24h_window] descartando envio silenciosamente ' \
+      "conversation=#{conversation.id} inbox=#{inbox.id} message=#{message.id}"
+    )
+    false
   end
 
   def handle_facebook_error(exception)

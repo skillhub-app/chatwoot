@@ -5,6 +5,22 @@
 
 ---
 
+## Histórico de Versões Relevantes
+
+- **v1.0.0.45** — Memory window config (`memory_window_messages` 10–500) + reset de memória por agente e por conversa.
+- **v1.0.0.46** — Adapter Gemini refatorado: preserva `thoughtSignature` e `id` real do `functionCall` entre iterações do loop agêntico. Corrigiu bug latente em Gemini 2.0 (multi-turn com tools estava quebrado silenciosamente). Detecção automática por presença de campo, sem if/else por modelo.
+- **v1.0.0.47** — Suporte completo a Gemini 3 Flash (Preview) com function calling em multi-turn. `gemini-3-flash-preview` adicionado ao dropdown. Validação backend `ALLOWED_MODELS_BY_PROVIDER` no model `AiAgent` rejeita modelos fora da lista com 422 e mensagem clara.
+- **v1.0.0.48** — Automação Kanban: `AutomationRules::KanbanConditionsService` avalia condições `kanban_stage_id`/`kanban_pipeline_id` em Ruby contra `KanbanItem`. Listener integrado com early-return. `move_kanban_stage` action chama Cancel+Scheduler. Fix `run_crm_sub_action 'move_item'` também chama Cancel+Scheduler.
+- **v1.0.0.49** — Frontend: condições kanban_pipeline_id/kanban_stage_id + ação move_kanban_stage (cascade pipeline→stage) no modal de automação. Backend: endpoint flat POST /kanban/items/:id/notes para sistemas externos (n8n).
+
+---
+
+## ⚠️ Patches Fork-Specific (precisam sobreviver a updates do Chatwoot)
+
+- **Facebook Messenger `messaging_type`** — ver [`PATCH_MESSENGER.md`](PATCH_MESSENGER.md). O upstream envia com `MESSAGE_TAG`/`ACCOUNT_UPDATE` (tag descontinuada pela Meta → code 100/subcode 1893061, "Invalid parameter"). Patch em `app/services/facebook/send_on_facebook_service.rb`: dentro de 24h → `messaging_type: RESPONSE` sem tag; fora de 24h → descarta silenciosamente. Se um update do Chatwoot sobrescrever esse service, **reaplicar**.
+
+---
+
 ## Identidade do Projeto
 
 - **Nome**: Chatwoot-Volponi

@@ -532,3 +532,28 @@
   value: 'https://us.cloud.langfuse.com'
   locked: false
 ## ---- End of LLM Observability ---- ##
+
+## ---- UAZAPI WhatsApp ---- ##
+- name: UAZAPI_ENABLED
+  display_title: 'Habilitar UAZAPI'
+  description: 'Permite que tenants criem conexões WhatsApp via UAZAPI'
+  value: 'false'
+  locked: false
+  type: boolean
+- name: UAZAPI_BASE_URL
+  display_title: 'URL da API UAZAPI'
+  description: 'URL base do servidor UAZAPI (sem barra no final). Ex: https://api.uazapi.com'
+  value: ''
+  locked: false
+- name: UAZAPI_ADMIN_TOKEN
+  display_title: 'Admin Token UAZAPI'
+  description: 'Token de administrador usado para criar/gerenciar instâncias. Encontrado na configuração do servidor UAZAPI.'
+  value: ''
+  locked: false
+  type: secret
+- name: UAZAPI_DEFAULT_INSTANCE_LIMIT
+  display_title: 'Limite padrão de instâncias por conta'
+  description: 'Número máximo de instâncias UAZAPI que cada conta pode criar por padrão.'
+  value: '5'
+  locked: false
+## ---- End of UAZAPI ---- ##

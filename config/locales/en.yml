@@ -241,6 +241,9 @@ en:
       instagram_shared_story_content: 'Shared story'
       instagram_shared_post_content: 'Shared post'
       deleted: This message was deleted
+      only_outgoing_deletable: Only outgoing messages can be deleted
+      already_deleted: This message was already deleted
+      revoke_failed: The message could not be deleted from the recipient
       whatsapp:
         list_button_label: 'Choose an item'
       delivery_status:
@@ -347,6 +350,10 @@ en:
       name: 'OpenAI'
       short_description: 'AI-powered reply suggestions, summarization, and message enhancement.'
       description: 'Leverage the power of large language models from OpenAI with the features such as reply suggestions, summarization, message rephrasing, spell-checking, and label classification.'
+    llm_providers:
+      name: 'LLM Providers'
+      short_description: 'Centralize as chaves de API dos provedores de IA usados pelos Agentes IA.'
+      description: 'Configure as chaves de API dos provedores de IA (OpenAI, Anthropic, Gemini) usados pelos seus Agentes IA. Centralize as credenciais em um único lugar — cada provider aceita uma chave por conta, usada por todos os agentes que o selecionarem.'
     linear:
       name: 'Linear'
       short_description: 'Create and link Linear issues directly from conversations.'

@@ -41,6 +41,10 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
       )
       @inbox.save!
     end
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { message: e.record.errors.full_messages.join(', ') }, status: :unprocessable_entity
+  rescue StandardError => e
+    render json: { message: e.message }, status: :unprocessable_entity
   end
 
   def update
@@ -75,23 +79,64 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
   def uazapi_qr
     return head :not_found unless @inbox.channel.is_a?(Channel::Uazapi)
 
-    data = @inbox.channel.api.get_qr_code
-    render json: { base64: data['base64'] || data['qrcode'] }
+    channel = @inbox.channel
+    unless channel.uazapi_instance_token.present?
+      return render json: { error: 'Token da instância não configurado. Edite a inbox e informe o token.' }, status: :unprocessable_entity
+    end
+
+    data = channel.api.get_qr_code
+    base64 = data['base64'] || data['qrcode'] || data.dig('qrcode', 'base64')
+    if base64.present?
+      render json: { base64: base64, instance_name: channel.uazapi_instance_name }
+    else
+      render json: { status: 'pending', qr_code: nil, message: 'QR Code ainda não disponível — aguarde alguns segundos', instance_name: channel.uazapi_instance_name }
+    end
   rescue StandardError => e
-    render json: { error: e.message }, status: :unprocessable_entity
+    status_code = e.message.include?('não encontrada') ? :not_found : :bad_gateway
+    render json: { error: e.message, instance_name: @inbox.channel.uazapi_instance_name }, status: status_code
   end
 
   def uazapi_status
     return head :not_found unless @inbox.channel.is_a?(Channel::Uazapi)
 
-    data = @inbox.channel.api.instance_info
-    instances = data.is_a?(Array) ? data : [data]
-    info = instances.find { |i| i['instanceName'] == @inbox.channel.uazapi_instance_name } || {}
-    status = info.dig('connectionStatus') || info.dig('instance', 'connectionStatus') || 'unknown'
-    @inbox.channel.update_columns(connection_status: status) if status != 'unknown'
-    render json: { connection_status: status }
+    channel = @inbox.channel
+    unless channel.uazapi_instance_token.present?
+      return render json: { connection_status: 'unknown', error: 'Token da instância não configurado' }
+    end
+
+    status = channel.api.normalized_status
+    channel.update_columns(connection_status: status) if status != 'unknown'
+    render json: { connection_status: status, instance_name: channel.uazapi_instance_name }
   rescue StandardError => e
     render json: { connection_status: 'unknown', error: e.message }
+  end
+
+  def uazapi_webhook_url
+    return head :not_found unless @inbox.channel.is_a?(Channel::Uazapi)
+
+    render json: {
+      webhook_url: @inbox.channel.webhook_url,
+      instance_name: @inbox.channel.uazapi_instance_name
+    }
+  end
+
+  def uazapi_logout
+    return head :not_found unless @inbox.channel.is_a?(Channel::Uazapi)
+
+    @inbox.channel.api.logout_instance
+    @inbox.channel.update_columns(connection_status: 'close')
+    render json: { connection_status: 'close' }
+  rescue StandardError => e
+    render json: { error: e.message }, status: :unprocessable_entity
+  end
+
+  def uazapi_reconnect
+    return head :not_found unless @inbox.channel.is_a?(Channel::Uazapi)
+
+    @inbox.channel.api.restart_instance
+    render json: { status: 'restarting' }
+  rescue StandardError => e
+    render json: { error: e.message }, status: :unprocessable_entity
   end
 
   def destroy
