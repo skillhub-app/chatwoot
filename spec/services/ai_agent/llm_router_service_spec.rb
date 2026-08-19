@@ -11,6 +11,16 @@ RSpec.describe AiAgent::LlmRouterService do
   let(:transient_error) { StandardError.new('Gemini error: {"error"=>{"code"=>503, "status"=>"UNAVAILABLE"}}') }
   let(:permanent_error) { StandardError.new('Gemini error: {"error"=>{"code"=>400, "status"=>"INVALID_ARGUMENT"}}') }
 
+  around do |example|
+    # config.cache_store = :null_store em test — Rails.cache.increment nunca
+    # acumula de verdade nesse store (produção usa Redis). Mesmo ajuste do
+    # invalid_grant_monitor_spec.rb, aqui pro contador fallback_used_today.
+    original_cache = Rails.cache
+    Rails.cache = ActiveSupport::Cache::MemoryStore.new
+    example.run
+    Rails.cache = original_cache
+  end
+
   before do
     allow_any_instance_of(described_class).to receive(:sleep_before_retry) # sem esperar de verdade nos specs
     # Account/agent factories chamam InstallationConfig.find_by(name: 'ACCOUNT_LEVEL_FEATURE_DEFAULTS')
@@ -20,7 +30,6 @@ RSpec.describe AiAgent::LlmRouterService do
     allow(InstallationConfig).to receive(:find_by)
       .with(name: 'CAPTAIN_OPEN_AI_API_KEY')
       .and_return(instance_double(InstallationConfig, value: 'fallback-openai-key'))
-    Rails.cache.clear
   end
 
   describe 'caminho feliz (sem erro)' do
