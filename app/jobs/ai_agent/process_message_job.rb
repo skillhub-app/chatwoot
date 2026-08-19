@@ -133,7 +133,10 @@ class AiAgent::ProcessMessageJob < ApplicationJob
       end
 
       current_prompt = { system: prompt[:system], messages: messages }
-      response = AiAgent::LlmService.call(agent, current_prompt, tools: active_tools)
+      # feat: cascade de resiliência (bug C) — retry com backoff no provider
+      # original e fallback pra OpenAI antes de desistir e cair no rescue
+      # genérico (bug A+B) lá embaixo.
+      response = AiAgent::LlmRouterService.call(agent, current_prompt, tools: active_tools)
 
       if response.text?
         Rails.logger.info "[AiAgent] Loop done at iteration=#{iteration} agent=#{agent.id}"
