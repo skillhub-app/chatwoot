@@ -83,6 +83,33 @@ class AiAgent::ProcessMessageJob < ApplicationJob
     duration = ((Time.current - started_at) * 1000).round
     record_execution(agent, conversation, new_messages, nil, duration,
                      status: 'error', error_message: e.message)
+    # bug A+B: antes, esse rescue engolia o erro em silêncio (o job "sucedia" pro
+    # Sidekiq, então sidekiq_options retry:2 nunca disparava, e FALLBACK_MESSAGE
+    # só era usado em MAX_ITERATIONS). Não reenfileiramos aqui de propósito: o
+    # AiAgent::MessageBuffer já foi drenado (buffer.pop_all em #perform), então
+    # um retry no nível do job encontraria a fila vazia e faria nada — daria a
+    # falsa impressão de resiliência sem realmente tentar de novo. O retry real
+    # pra erro transitório do LLM (Gemini 5xx/timeout) já acontece um nível
+    # abaixo, dentro do cascade Gemini→OpenAI (ver AiAgent::LlmRouterService).
+    # Se o erro chegou até aqui, já se esgotaram as tentativas — a única coisa
+    # segura a fazer é avisar alguém, não fingir que vai tentar de novo sozinho.
+    notify_unrecoverable_error(agent, conversation, last_was_audio)
+  end
+
+  def notify_unrecoverable_error(agent, conversation, last_was_audio)
+    AiAgent::MessageHumanizer.send_response(conversation, FALLBACK_MESSAGE, agent: agent,
+                                            last_was_audio: last_was_audio)
+    AiAgent::ActivityService.ai_error(conversation)
+    add_error_label(conversation)
+  rescue StandardError => e
+    Rails.logger.error "[AiAgent] failed to notify about unrecoverable error: #{e.message}"
+  end
+
+  def add_error_label(conversation)
+    labels = conversation.label_list.to_a
+    return if labels.include?('ia-com-erro')
+
+    conversation.update!(label_list: labels | ['ia-com-erro'])
   end
 
   # ── Agentic loop ─────────────────────────────────────────────────────────────
