@@ -204,7 +204,9 @@ class Kanban::ExecuteActionService
 
     return true unless start_str.present? && end_str.present?
 
-    current = Time.current.in_time_zone.strftime('%H:%M')
+    # bug D: Time.current.in_time_zone (sem argumento) usa Time.zone, que aqui é
+    # UTC — os configs de horário comercial são pensados em BRT.
+    current = Time.current.in_time_zone('America/Sao_Paulo').strftime('%H:%M')
     current >= start_str && current <= end_str
   end
 

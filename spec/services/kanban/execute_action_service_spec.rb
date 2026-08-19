@@ -185,6 +185,37 @@ RSpec.describe Kanban::ExecuteActionService do
     end
   end
 
+  describe '#inside_business_hours? (bug D)' do
+    subject(:service) { build_service }
+
+    before do
+      action.update!(config: { 'use_ai' => false, 'message' => 'oi', 'business_hours_start' => '07:00',
+                                'business_hours_end' => '19:55' })
+    end
+
+    it 'usa horário de Brasília, não UTC, para decidir se está dentro do horário comercial' do
+      # 04:36 BRT == 07:36 UTC. Antes do fix, Time.zone (UTC) fazia esse horário
+      # passar como "dentro" da janela 07:00-19:55 configurada em BRT.
+      travel_to Time.utc(2026, 6, 28, 7, 36) do
+        expect(service.send(:inside_business_hours?)).to be false
+      end
+    end
+
+    it 'aceita um horário realmente dentro da janela comercial em BRT' do
+      # 10:00 BRT == 13:00 UTC
+      travel_to Time.utc(2026, 6, 28, 13, 0) do
+        expect(service.send(:inside_business_hours?)).to be true
+      end
+    end
+
+    it 'rejeita um horário realmente fora da janela em BRT (23h BRT)' do
+      # 23:00 BRT == 02:00 UTC (dia seguinte)
+      travel_to Time.utc(2026, 6, 29, 2, 0) do
+        expect(service.send(:inside_business_hours?)).to be false
+      end
+    end
+  end
+
   describe 'smoke regression: use_ai=false continua funcionando' do
     let(:fixed_action) do
       KanbanAutomationAction.create!(
