@@ -109,6 +109,8 @@ RSpec.describe AiAgent::GoogleCalendar::ApiClient do
     end
 
     before do
+      allow(AiAgent::GoogleCalendar::AuthService).to receive(:client_id).and_return('test-client-id')
+      allow(AiAgent::GoogleCalendar::AuthService).to receive(:client_secret).and_return('test-client-secret')
       stub_request(:post, 'https://oauth2.googleapis.com/token')
         .to_return(status: 400, body: { error: 'invalid_grant', error_description: 'Bad Request' }.to_json,
                    headers: { 'Content-Type' => 'application/json' })

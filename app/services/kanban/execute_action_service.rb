@@ -21,7 +21,12 @@ class Kanban::ExecuteActionService
     end
 
     send("execute_#{@action.action_type}")
-    @execution.update!(status: 'completed', executed_at: Time.current)
+    # bug H (achado pelo próprio spec novo): execute_send_whatsapp já marca a
+    # execution como 'skipped' internamente em alguns caminhos (sem conversa,
+    # fora do horário comercial, sender não encontrado, LLM sem resposta) e
+    # dá `return` — sem esse guard, essa linha sobrescrevia 'skipped' com
+    # 'completed' incondicionalmente.
+    @execution.update!(status: 'completed', executed_at: Time.current) if @execution.status == 'running'
   rescue StandardError => e
     @execution.update!(status: 'failed', error_message: e.message, executed_at: Time.current)
     log_activity('automation_failed', error: e.message)

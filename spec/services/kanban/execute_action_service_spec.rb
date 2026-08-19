@@ -149,11 +149,11 @@ RSpec.describe Kanban::ExecuteActionService do
       context 'com ai_prompt preenchido' do
         before { action.update!(config: { 'use_ai' => true, 'ai_prompt' => 'lembrar do desconto de 20%' }) }
 
-        it 'inclui INTENÇÃO DO OPERADOR no system prompt' do
+        it 'inclui o ai_prompt do operador (via FollowUpPromptParser) no system prompt' do
           allow(AiAgent::LlmService).to receive(:call).and_return(llm_response)
           service.send(:generate_ai_message)
           expect(AiAgent::LlmService).to have_received(:call) do |_agent, prompt, **|
-            expect(prompt[:system]).to include('INTENÇÃO DO OPERADOR')
+            expect(prompt[:system]).to include('<exemplo_de_mensagem>')
             expect(prompt[:system]).to include('lembrar do desconto de 20%')
           end
         end
@@ -164,7 +164,7 @@ RSpec.describe Kanban::ExecuteActionService do
           AiAgent::LlmService::LlmResponse.new(type: :text, text: '', tool_calls: [], raw_parts: nil)
         end
 
-        before { allow(service).to receive(:sleep_before_retry) }
+        before { allow_any_instance_of(described_class).to receive(:sleep_before_retry) } # rubocop:disable RSpec/AnyInstance
 
         it 'tenta 3 vezes (1 original + 2 retries) antes de desistir' do
           allow(AiAgent::LlmService).to receive(:call).and_return(empty_response)

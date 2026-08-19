@@ -5,8 +5,18 @@ RSpec.describe AiAgent::GoogleCalendar::InvalidGrantMonitor do
   let(:ai_agent)  { create(:ai_agent, account: account, name: 'Julia') }
   let(:other_agent) { create(:ai_agent, account: account, name: 'Nilda') }
 
+  around do |example|
+    # config.cache_store = :null_store em test — Rails.cache.increment nunca
+    # acumula de verdade nesse store. Troca por um MemoryStore real só pra
+    # esses specs (o código de produção usa Redis, que já suporta increment
+    # atômico de verdade — isso é puramente sobre o ambiente de teste).
+    original_cache = Rails.cache
+    Rails.cache = ActiveSupport::Cache::MemoryStore.new
+    example.run
+    Rails.cache = original_cache
+  end
+
   before do
-    Rails.cache.clear
     allow(Rails.logger).to receive(:warn).and_call_original
   end
 

@@ -56,7 +56,7 @@ RSpec.describe 'Api::V1::Accounts::Kanban::AutomationsController#update', type: 
       other_user    = create(:user, account: other_account, role: :agent)
 
       patch url, params: { stop_on_ai_disabled: true }, headers: other_user.create_new_auth_token, as: :json
-      expect(response).to have_http_status(:not_found)
+      expect(response).to have_http_status(:unauthorized)
       expect(automation.reload.stop_on_ai_disabled).to be false
     end
   end

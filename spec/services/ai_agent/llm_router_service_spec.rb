@@ -13,6 +13,10 @@ RSpec.describe AiAgent::LlmRouterService do
 
   before do
     allow_any_instance_of(described_class).to receive(:sleep_before_retry) # sem esperar de verdade nos specs
+    # Account/agent factories chamam InstallationConfig.find_by(name: 'ACCOUNT_LEVEL_FEATURE_DEFAULTS')
+    # internamente (Featurable) — precisa de um default antes do .with específico, senão
+    # QUALQUER outra chamada a find_by explode com MockExpectationError.
+    allow(InstallationConfig).to receive(:find_by).and_call_original
     allow(InstallationConfig).to receive(:find_by)
       .with(name: 'CAPTAIN_OPEN_AI_API_KEY')
       .and_return(instance_double(InstallationConfig, value: 'fallback-openai-key'))
